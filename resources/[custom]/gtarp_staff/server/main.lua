@@ -79,7 +79,9 @@ function Handlers.tp(src, args)
     log('tp', src, target, ('to %.1f,%.1f,%.1f'):format(c.x, c.y, c.z))
 end
 
-Handlers.goto = Handlers.tp
+-- 'goto' is a reserved keyword in Lua 5.4, so it cannot be a dot-indexed
+-- field name. Use bracket indexing; runtime dispatch uses Handlers[cmd].
+Handlers["goto"] = Handlers.tp
 
 function Handlers.tpm(src)
     if src == 0 then return notify(src, 'Staff', 'tpm requires in-game', 'error') end

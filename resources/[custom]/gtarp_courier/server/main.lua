@@ -65,8 +65,9 @@ RegisterNetEvent('gtarp_courier:post', function(payload)
     Bridge.Notify(src, 'Courier', ('Posted #%d for $%d'):format(id, b), 'success')
 end)
 
-RegisterNetEvent('gtarp_courier:accept', function(id)
-    local src = source
+-- Accept a posting on behalf of player `src`. Shared by the net event and
+-- the /courier accept command so both paths carry the real player source.
+local function acceptPosting(src, id)
     local citizenid = Bridge.GetCitizenId(src)
     if not citizenid then return end
     local row = Postings[id]
@@ -86,6 +87,10 @@ RegisterNetEvent('gtarp_courier:accept', function(id)
         dropoff = { x = row.dropoff_x, y = row.dropoff_y, z = row.dropoff_z },
         label = row.label,
     })
+end
+
+RegisterNetEvent('gtarp_courier:accept', function(id)
+    acceptPosting(source, id)
 end)
 
 RegisterNetEvent('gtarp_courier:complete', function(id)
@@ -143,7 +148,7 @@ RegisterCommand('courier', function(source, args)
         if n == 0 then Bridge.Notify(source, 'Courier', 'No open postings', 'inform') end
     elseif sub == 'accept' and args[2] then
         local id = tonumber(args[2])
-        if id then TriggerEvent('gtarp_courier:accept', { source = source }, id) end
+        if id then acceptPosting(source, id) end
     end
 end, false)
 

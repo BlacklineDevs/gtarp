@@ -318,9 +318,11 @@ via `qbx_properties` directly; there is nothing custom to verify here.
       ~5s corrupts future canvass facts; $750 payoff silences entirely.
 - [ ] Intimidating a witness in view of ANOTHER witness spawns a fresh
       witness-intimidation incident against the suspect.
-- [ ] Double-dispatch guard: with `Config.FirePoliceAlerts=false`
+- [ ] Double-dispatch guard: with `Config.FirePoliceAlerts=true`
       (default), a store robbery produces exactly ONE police alert (the
-      recipe's own), never a second from this resource.
+      recipe's own — the policeAlert hook is qbxAlerts=true and can never
+      re-alert), while unwitnessed gunfire produces none and witnessed
+      gunfire produces exactly one bystander alert per suspect per 120s.
 - [ ] Markers survive a resource restart (~30 min persistence).
 
 ## 22. Counterfeit cash — `gtarp_counterfeit`

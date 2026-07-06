@@ -50,7 +50,8 @@ Bridge-pattern (see `docs/GTA6-READINESS.md`): all logic is in `server/` and
   resources this bus listens on (`qbx_storerobbery`, `qbx_drugs`
   cornerselling, …) already roll their own NPC-reported alerts for those
   same crimes — a second ping would double-dispatch every robbery. The
-  optional alert layer (`Config.FirePoliceAlerts`, **default OFF**) only
+  alert layer (`Config.FirePoliceAlerts`, **default ON** since the
+  double-alert verification against the deployed recipe tree passed) only
   ever fires for crimes nothing else alerts on (gunfire), and it reuses the
   recipe's own `police:server:policeAlert` event — no parallel dispatch.
 - **Testimonial only.** No casings, blood, or fingerprints — physical
@@ -112,7 +113,8 @@ Ace-restricted; grant once in your server cfg:
 
 - **`Config.Hooks`** — the event bus: toggle each crime source; `qbxAlerts`
   marks crimes the recipe already alerts on (those can never re-alert).
-- **`Config.FirePoliceAlerts`** — the opt-in 911 layer (default OFF).
+- **`Config.FirePoliceAlerts`** — the shots-fired 911 layer (default ON;
+  verified non-duplicating — the recipe alerts on nothing gunfire-shaped).
 - **`Config.WitnessRadius` / `Min`/`MaxWitnesses` / `WitnessTtlMin`** —
   snapshot range, witness count, marker lifetime.
 - **`Config.FactsPerWitness*` / `PlateChars` / `TopColors`** — the fact

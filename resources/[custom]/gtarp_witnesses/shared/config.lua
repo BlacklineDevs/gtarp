@@ -64,11 +64,18 @@ Config.Hooks = {
     },
 }
 
--- Opt-in 911 layer, default OFF (per the duplication review). When true,
--- hooks with qbxAlerts = false (crimes nothing else alerts on) fire ONE
--- police:server:policeAlert when witnesses actually saw the crime. Hooks
--- with qbxAlerts = true never re-alert regardless of this switch.
-Config.FirePoliceAlerts = false
+-- 911 layer for crimes nothing else alerts on. When true, hooks with
+-- qbxAlerts = false fire ONE police:server:policeAlert when witnesses
+-- actually saw the crime. Hooks with qbxAlerts = true never re-alert
+-- regardless of this switch.
+--
+-- Double-alert verification (the condition the duplication review set for
+-- enabling this): no resource in the deployed recipe tree handles
+-- weaponDamageEvent / CEventGunShot / gunfire at all, so shots_fired has no
+-- competing recipe alert. qbx_vehiclekeys' theft alert can coincide with a
+-- shots_fired alert during an armed carjacking, but those are distinct
+-- crimes, and the per-suspect IncidentCooldownSec below caps the rate.
+Config.FirePoliceAlerts = true
 
 -- ---------------------------------------------------------------------------
 -- Witness snapshot

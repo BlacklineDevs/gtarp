@@ -508,7 +508,22 @@ via `qbx_properties` directly; there is nothing custom to verify here.
       rejection, `citations.GetOpenFor` zeroed shape all PASS;
       `gtarp_legal_petitions` table present.
 
-## 28. Triage — common failures
+## 28. Anonymous tips — `gtarp_tips`
+
+- [ ] Boot banner: `tip line open — 8 payphone(s); 911 log ONLINE`.
+- [ ] `/tip saw a red sultan dumping bags` away from any payphone →
+      "need to be at a payphone". At a configured phone → "the tip is
+      in", on-duty officers get the soft ping, and `/calls` shows
+      `[TIP] ...` with the PAYPHONE's location and `anonymous` as the
+      source — never the tipper's name or citizenid.
+- [ ] Second `/tip` within 5 min (same character) → cooldown line.
+      Different character → allowed (cooldown is per-citizen).
+- [ ] Text under 10 chars → usage error.
+- [ ] Stop gtarp_mdt → `/tip` says "the line is dead", no errors.
+- [ ] devtest boot: `tips.GetSummary` + `mdt.LogCall` round-trip PASS
+      (probe row inserted into gtarp_mdt_calls and cleaned up).
+
+## 29. Triage — common failures
 
 | Symptom | Likely cause |
 | --- | --- |

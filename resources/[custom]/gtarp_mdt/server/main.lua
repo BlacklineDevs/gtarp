@@ -599,11 +599,25 @@ local function pruneCalls()
     end)
 end
 
+-- Insert one row into the 911 log. Shared by the alert-funnel recorder
+-- and the LogCall export (gtarp_tips). Returns true on insert.
+local function insertCall(text, coords, label)
+    text = tostring(text or ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if text == '' then return false end
+    if #text > Config.Calls.TextMax then text = text:sub(1, Config.Calls.TextMax) end
+    local ok = false
+    pcall(function()
+        ok = MySQL.insert.await(
+            'INSERT INTO gtarp_mdt_calls (text, x, y, z, src_label) VALUES (?, ?, ?, ?, ?)',
+            { text, coords and coords.x or nil, coords and coords.y or nil,
+              coords and coords.z or nil, tostring(label or '') }) ~= nil
+    end)
+    if ok then dbg(('call logged: %s'):format(text)) end
+    return ok
+end
+
 local function recordCall(text, src, coords)
     if not Config.Calls.Enabled then return end
-    text = text:gsub('^%s+', ''):gsub('%s+$', '')
-    if text == '' then return end
-    if #text > Config.Calls.TextMax then text = text:sub(1, Config.Calls.TextMax) end
 
     local key = src or 0
     local t = now()
@@ -615,13 +629,7 @@ local function recordCall(text, src, coords)
         local cid = Bridge.GetCitizenId(src)
         label = cid and ('citizen %s'):format(cid) or ''
     end
-    pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO gtarp_mdt_calls (text, x, y, z, src_label) VALUES (?, ?, ?, ?, ?)',
-            { text, coords and coords.x or nil, coords and coords.y or nil,
-              coords and coords.z or nil, label })
-    end)
-    dbg(('call logged: %s'):format(text))
+    insertCall(text, coords, label)
 end
 
 -- /calls [n] — recent 911 traffic
@@ -782,6 +790,16 @@ exports('SealBooking', function(bookingId)
             { bookingId }) == 1
     end)
     return sealed
+end)
+
+-- ADDITIVE export — sibling systems (gtarp_tips) put entries on the 911
+-- log without touching its table. Caller owns its own flood control;
+-- text is bounded here. Same never-change-signature rule.
+-- LogCall(text: string, coords: {x,y,z}|nil, label: string) -> boolean
+exports('LogCall', function(text, coords, label)
+    if not Config.Calls.Enabled then return false end
+    if type(coords) ~= 'table' or type(coords.x) ~= 'number' then coords = nil end
+    return insertCall(text, coords, label)
 end)
 
 ---Desk counts for devtest and future consumers.

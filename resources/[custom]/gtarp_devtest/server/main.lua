@@ -182,6 +182,34 @@ local function testShapes()
         fail('citations — resource not started')
     end
 
+    if resourceUp('gtarp_tips') then
+        try('tips.GetSummary', function()
+            local s = exports.gtarp_tips:GetSummary()
+            check(type(s) == 'table' and type(s.payphones) == 'number' and s.payphones > 0,
+                'tips.GetSummary returns {payphones > 0}')
+        end)
+        if resourceUp('gtarp_mdt') then
+            try('mdt.LogCall round-trip', function()
+                local marker = ('[devtest] probe %d'):format(os.time())
+                local ok = exports.gtarp_mdt:LogCall(marker, nil, 'devtest')
+                check(ok == true, 'mdt.LogCall accepts a probe entry')
+                local row
+                pcall(function()
+                    row = MySQL.single.await(
+                        'SELECT id FROM gtarp_mdt_calls WHERE text = ? ORDER BY id DESC LIMIT 1',
+                        { marker })
+                end)
+                if check(row ~= nil, 'mdt.LogCall probe landed in gtarp_mdt_calls') then
+                    pcall(function()
+                        MySQL.update.await('DELETE FROM gtarp_mdt_calls WHERE id = ?', { row.id })
+                    end)
+                end
+            end)
+        end
+    else
+        fail('tips — resource not started')
+    end
+
     if resourceUp('gtarp_legal') then
         try('legal.GetSummary', function()
             local s = exports.gtarp_legal:GetSummary()

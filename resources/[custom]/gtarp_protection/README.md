@@ -39,6 +39,9 @@ same way `gtarp_numbers` winnings do.
 - Gang (`PlayerData.gang`), zone ownership (live turf read), and position (off
   the caller's ped) are all read server-side; the client sends nothing but the
   command. You can only collect a business whose zone **your** gang controls.
+  (As with every FiveM proximity check, the ped position is client-synced under
+  OneSync — a position spoof could fake standing at a business, but the payout is
+  still gated on live turf ownership + the per-business cooldown.)
 - Per-business **collect lock** + a re-checked, gang-agnostic per-business
   cooldown (`is there a collection newer than the interval`) mean two crew
   members can't double-collect one business in a cycle, even racing the same

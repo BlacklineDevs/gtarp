@@ -33,8 +33,11 @@ and attached to a `gtarp_evidence` case.
 ## Anti-abuse (all server-side)
 
 - **On-duty police** gate (`PlayerData.job` read server-side). The target is the
-  nearest player computed from **server-side** ped positions — the client sends
-  no target or coordinate.
+  nearest player, chosen server-side — the client sends no target id or
+  coordinate. (Note: like every FiveM proximity check, the ped positions the
+  server compares are client-synced under OneSync, so a position-spoofing cheat
+  on an *already-police* account could stand "next to" an *already-wanted*
+  suspect from afar; the on-duty + active-warrant gates bound that.)
 - **Probable cause:** only a suspect with an active `gtarp_mdt` warrant can be
   seized from (`Config.RequireWarrant`), tying forfeiture to the crime→warrant
   system and preventing shakedowns of clean players. If `gtarp_mdt` is offline,

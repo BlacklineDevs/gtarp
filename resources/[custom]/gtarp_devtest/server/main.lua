@@ -310,6 +310,76 @@ local function testShapes()
         fail('chopshop — resource not started')
     end
 
+    if resourceUp('gtarp_laundering') then
+        try('laundering.GetSummary', function()
+            local s = exports.gtarp_laundering:GetSummary()
+            check(type(s) == 'table' and type(s.totalRuns) == 'number'
+                and type(s.totalDirtyWashed) == 'number' and type(s.flaggedRuns) == 'number',
+                'laundering.GetSummary returns {totalRuns, totalDirtyWashed, flaggedRuns}')
+        end)
+    else
+        fail('laundering — resource not started')
+    end
+
+    if resourceUp('gtarp_numbers') then
+        try('numbers.GetSummary', function()
+            local s = exports.gtarp_numbers:GetSummary()
+            check(type(s) == 'table' and type(s.draws) == 'number'
+                and type(s.totalStaked) == 'number' and type(s.totalPaid) == 'number'
+                and type(s.openDrawSeq) == 'number',
+                'numbers.GetSummary returns {draws, totalStaked, totalPaid, openDrawSeq}')
+        end)
+    else
+        fail('numbers — resource not started')
+    end
+
+    if resourceUp('gtarp_protection') then
+        try('protection.GetSummary', function()
+            local s = exports.gtarp_protection:GetSummary()
+            check(type(s) == 'table' and type(s.businesses) == 'number'
+                and type(s.shakedowns) == 'number' and type(s.totalCollected) == 'number'
+                and type(s.flagged) == 'number',
+                'protection.GetSummary returns {businesses, shakedowns, totalCollected, flagged}')
+        end)
+    else
+        fail('protection — resource not started')
+    end
+
+    if resourceUp('gtarp_loanshark') then
+        try('loanshark.GetSummary', function()
+            local s = exports.gtarp_loanshark:GetSummary()
+            check(type(s) == 'table' and type(s.open) == 'number'
+                and type(s.repaid) == 'number' and type(s.defaulted) == 'number'
+                and type(s.lentTotal) == 'number',
+                'loanshark.GetSummary returns {open, repaid, defaulted, lentTotal}')
+        end)
+    else
+        fail('loanshark — resource not started')
+    end
+
+    if resourceUp('gtarp_seizure') then
+        try('seizure.GetSummary', function()
+            local s = exports.gtarp_seizure:GetSummary()
+            check(type(s) == 'table' and type(s.seizures) == 'number'
+                and type(s.totalForfeited) == 'number',
+                'seizure.GetSummary returns {seizures, totalForfeited}')
+        end)
+    else
+        fail('seizure — resource not started')
+    end
+
+    if resourceUp('gtarp_smuggling') then
+        try('smuggling.GetSummary', function()
+            local s = exports.gtarp_smuggling:GetSummary()
+            check(type(s) == 'table' and type(s.dropSites) == 'number'
+                and type(s.delivered) == 'number' and type(s.active) == 'number'
+                and type(s.dirtyPaid) == 'number',
+                'smuggling.GetSummary returns {dropSites, delivered, active, dirtyPaid}')
+        end)
+    else
+        fail('smuggling — resource not started')
+    end
+
     if resourceUp('gtarp_perf') then
         try('perf.GetSummary', function()
             local s = exports.gtarp_perf:GetSummary()
@@ -396,6 +466,12 @@ local REQUIRED_TABLES = {
     gtarp_grind       = { 'grind_skill' },
     gtarp_gunrunning  = { 'gtarp_gunrunning_sales' },
     gtarp_chopshop    = { 'gtarp_chopshop_stolen', 'gtarp_chopshop_sales' },
+    gtarp_laundering  = { 'gtarp_laundering_runs' },
+    gtarp_numbers     = { 'gtarp_numbers_bets', 'gtarp_numbers_draws' },
+    gtarp_protection  = { 'gtarp_protection_collections' },
+    gtarp_loanshark   = { 'gtarp_loanshark_loans' },
+    gtarp_seizure     = { 'gtarp_seizure_forfeitures' },
+    gtarp_smuggling   = { 'gtarp_smuggling_runs' },
     gtarp_citations   = { 'gtarp_citations' },
     gtarp_insurance   = { 'gtarp_insurance_policies', 'gtarp_insurance_claims' },
     gtarp_legal       = { 'gtarp_legal_petitions' },

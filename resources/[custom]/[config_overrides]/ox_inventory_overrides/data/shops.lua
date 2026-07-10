@@ -156,4 +156,46 @@ ExtraShops = {
             vector3(307.7, -1433.4, 29.9),
         },
     },
+
+    -- ---------------------------------------------------------------------
+    -- Garden & Hydro Supply — grow inputs + household "additives" for
+    -- gtarp_drugs. Legit storefront (nothing illegal is sold here; the
+    -- product itself is made by the player). Prices set against the ~$350
+    -- paycheck: a seed + soil + water is a modest starting outlay.
+    -- ⚠️ coords are placeholders — VERIFY IN-GAME (on-ground/reachable).
+    -- ---------------------------------------------------------------------
+    garden_supply = {
+        name = 'Garden & Hydro Supply',
+        groups = nil, -- public
+        inventory = {
+            -- grow inputs
+            P('weed_seed',    50),
+            P('soil',         15),
+            P('wateringcan',  80),
+            P('fertilizer',   60),   -- → Premium quality
+            P('speed_grow',   40),
+            P('pgr',          75),
+            -- mix additives (each adds one base effect; household goods)
+            P('cuke',          8),
+            P('banana',        6),
+            P('paracetamol',  15),
+            P('donut',         8),
+            P('viagra',       45),
+            P('mouthwash',    10),
+            P('flu_medicine', 18),
+            P('gasoline',     20),
+            P('motor_oil',    25),
+            P('mega_bean',    12),
+            P('chili',         6),
+            P('battery',      20),
+            P('iodine',       22),
+            P('addy',         60),
+            P('horse_semen',  30),
+            P('energy_drink', 12),
+        },
+        locations = {
+            vector3(1391.5, 3605.5, 38.9),   -- Sandy Shores (VERIFY IN-GAME)
+            vector3(2001.5, 4636.5, 41.0),   -- Grapeseed nursery (VERIFY IN-GAME)
+        },
+    },
 }

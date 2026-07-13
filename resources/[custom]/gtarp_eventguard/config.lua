@@ -124,6 +124,13 @@ Config.Events = {
     ['gtarp_gangs:deposit']        = { calls = 20, window_seconds = 60 },
     ['gtarp_gangs:withdraw']       = { calls = 20, window_seconds = 60 },
 
+    -- gtarp_market — the Commodity Exchange. `sell` is the one money-touching
+    -- net event (pays CLEAN cash for raw goods, server-priced + server-proximity
+    -- checked). It already has an atomic per-player cooldown; this budget is
+    -- defense-in-depth against a flood. Load-order: ensure gtarp_eventguard
+    -- before gtarp_market so this guard registers first in the handler chain.
+    ['gtarp_market:sell']          = { calls = 20, window_seconds = 60 },
+
     -- ox_inventory shop purchase fan-out — recipe-shipped net event.
     -- ox_inventory does its own per-event data validation (Utils.LogExploit);
     -- this blunt call-count budget is defense-in-depth on top.

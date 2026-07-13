@@ -9,6 +9,49 @@ Format: newest first. Dates are EDT.
 
 ---
 
+## 2026-07-13 - Commodity Exchange (`gtarp_market`)
+
+The legal grind gets a real market. A new **Palm6 Commodity Exchange** buys raw
+goods (`gtarp_grind` outputs) at a **live price that moves with supply and
+demand** instead of a flat vendor rate — and it's the first place you can ever
+sell **animal pelts**, which hunting drops but nothing used to buy.
+
+**Tracking (internal):**
+- 🆕 **`gtarp_market`** — sell all raw goods (`raw_fish`, `raw_ore`, `raw_meat`,
+  `animal_pelt`) at the exchange counter with **E**; check live prices any time
+  with **`/market`** (a branded `gtarp_ui` panel).
+- 📈 **Dynamic price model, server-authoritative, no client ticks.** Price is a
+  pure function of the last persisted `{price, timestamp}` and the current time:
+  it recovers toward a rested `base` over wall-clock time and drops per unit
+  sold — **marginally within a single sale**, so dumping a big stack crashes the
+  price as it sells (no selling 500 units at the top). Floored at `floorPct` of
+  base. Restart- and relog-safe, same discipline as the drug grow/dry/cook
+  timers.
+- 🐟 `raw_fish`/`raw_ore`/`raw_meat` can be sold at *either* their fixed
+  `gtarp_grind` buyer (the safe floor, with the grind XP bonus) *or* the
+  fluctuating exchange — a genuine sell-now-or-time-it choice. **`animal_pelt`
+  is exchange-only** (fixes the confirmed orphan).
+- 🔒 Money/dupe-safe: atomic per-player cooldown set before any yield;
+  server-side proximity (the client sends no items, amounts or prices);
+  consume-before-grant; the market only moves on a completed sale; in-memory
+  price set before the DB write so concurrent sellers can't double-dip the top
+  price; marginal loop hard-capped.
+- 🔧 Wiring: `sql/0046` (`gtarp_market_state` + `gtarp_market_trades`,
+  `gtarp_`-prefixed); `gtarp_eventguard` budgets `gtarp_market:sell` (now
+  guarding 51 events); `gtarp_economy` shows an informational **clean-cash**
+  line via a `GetSummary` export. Bridge-pattern native (§6 gate clean).
+  **Exchange coords are a Tier-3 placeholder — VERIFY IN-GAME.** No new items,
+  so no PNG debt. Refining tier (`raw_ore→refined_metal`, `pelt→cured_leather`)
+  deferred to v2.
+
+**📣 Public:** The city has a **Commodity Exchange**. Fish it, mine it, hunt it,
+then bring your raw goods to the exchange and sell at a **price that actually
+moves** — flood the market and it drops, let it rest and it climbs back. It's
+also the only place to sell **animal pelts**. Sell now, or hold for a better
+price. Check the board any time with **/market**.
+
+---
+
 ## 2026-07-11 - Meth cook lab (`gtarp_drugs` §9)
 
 The Schedule I supply chain gets its second drug: **meth**, via a new cook

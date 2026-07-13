@@ -75,6 +75,14 @@ local function tally()
             n(ga.gangs), n(ga.members), money(ga.totalVault), n(ga.topRep))
     else L[#L + 1] = 'gangs:       offline' end
 
+    -- gtarp_market pays CLEAN cash for raw goods (legal economy), so like gangs
+    -- it doesn't feed the dirty minted/removed tally — informational only.
+    local mk = Bridge.Summary('gtarp_market')
+    if mk then
+        L[#L + 1] = ('market:      %d commodities, %d unit(s) sold, %s paid (clean)'):format(
+            n(mk.commodities), n(mk.unitsSold), money(mk.totalPaid))
+    else L[#L + 1] = 'market:      offline' end
+
     L[#L + 1] = ('-- dirty minted ~%s | removed (laundered+forfeited) ~%s | net in play ~%s'):format(
         money(minted), money(removed), money(minted - removed))
     L[#L + 1] = '   (net excludes recipe bank-robbery minting + black-market spend)'

@@ -88,6 +88,8 @@ Config.MinRank = {
 -- so the client never supplies who to invite. Pending invites expire.
 Config.InviteRadius = 6.0
 Config.InviteExpirySec = 60
+Config.InviteCooldownSec = 10  -- seconds between invites per inviter (anti-spam:
+                               -- an invite pops a confirm dialog on the target)
 
 -- ---------------------------------------------------------------------------
 -- Vault (CASH vault — auditable, chosen over an ox_inventory stash per the

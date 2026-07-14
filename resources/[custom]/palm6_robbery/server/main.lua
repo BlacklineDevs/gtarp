@@ -83,9 +83,12 @@ RegisterNetEvent('palm6_robbery:cancel', function()
     local pend = pending[src]
     if not pend then return end
     pending[src] = nil
-    -- Soft penalty on cancel so start/cancel can't spam dispatch, but a genuine
-    -- interruption isn't a full 30-minute lockout.
-    cd[pend.index] = os.time() + 60
+    -- Keep the FULL cooldown set at start. A dispatch already fired to police the
+    -- moment this robbery started, so cancelling must NOT shorten the reservation —
+    -- otherwise start->cancel cycling trickles a false 911 to every on-duty officer
+    -- roughly once a minute per ATM. cd[index] was set to now+cooldown_secs at start;
+    -- leave it (never lower it below the existing reservation).
+    cd[pend.index] = math.max(cd[pend.index] or 0, os.time() + Config.ATMs.cooldown_secs)
 end)
 
 AddEventHandler('playerDropped', function()

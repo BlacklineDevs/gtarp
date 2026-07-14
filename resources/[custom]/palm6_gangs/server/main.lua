@@ -21,7 +21,9 @@ local function now() return os.time() end
 local function dbg(m) if Config.Debug then print('[palm6_gangs] ' .. m) end end
 
 -- /gangweb single-use token minting (see sql/0044_gang_web_tokens.sql).
-local webCooldown = {}   -- [src] = ts of last /gangweb (anti-spam)
+local webCooldown = {}    -- [src] = ts of last /gangweb (anti-spam)
+local inviteCooldown = {} -- [src] = ts of last invite (anti-spam; stops forcing
+                          -- repeated confirm-dialogs onto a nearby player)
 local WEB_TOKEN_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz'
 local function makeWebToken()
     math.randomseed(os.time() + os.clock() * 1000)
@@ -399,6 +401,14 @@ RegisterNetEvent('palm6_gangs:invite', function()
     if not bestSrc then
         Bridge.Notify(src, 'Gangs', 'No eligible player nearby to invite.', 'error'); return
     end
+
+    -- Throttle actual invites (each pops a blocking confirm dialog on the target).
+    -- Checked only once a target is found, so "nobody nearby" never burns the cd.
+    local it = now()
+    if it - (inviteCooldown[src] or 0) < (Config.InviteCooldownSec or 10) then
+        Bridge.Notify(src, 'Gangs', 'Slow down — you just sent an invite.', 'error'); return
+    end
+    inviteCooldown[src] = it
 
     pendingInvites[bestCid] = {
         gangId = g.id, gangName = g.name, gangTag = g.tag,

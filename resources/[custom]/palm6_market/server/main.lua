@@ -47,7 +47,18 @@ local function currentPrice(item)
     local elapsedMin = math.max(0, now() - st.ts) / 60
     local recovered = st.price + c.base * (Config.RecoverPctPerMin / 100) * elapsedMin
     if recovered > c.base then recovered = c.base end
-    return recovered
+    -- palm6_pulse modifier bus: a "Hot Exchange" Pulse Window can spike ONE
+    -- commodity's price. Read server-side (a client can never assert a multiplier)
+    -- and pcall-wrapped so market runs standalone if pulse is absent. Applied last
+    -- so the /market display and the sell payout agree.
+    local mult = 1.0
+    pcall(function()
+        if GetResourceState('palm6_pulse') == 'started' then
+            local m = exports.palm6_pulse:GetActiveModifier('market', item)
+            if type(m) == 'number' and m > 0 then mult = m end
+        end
+    end)
+    return recovered * mult
 end
 
 -- Persist a commodity's new price + timestamp. Memory is authoritative during

@@ -108,6 +108,37 @@ CREATE TABLE IF NOT EXISTS `palm6_yard_bail` (
     created_at       BIGINT      NOT NULL DEFAULT 0,
     INDEX idx_palm6_yard_bail_cid (citizenid)
 )]] },
+    { name = '0048 palm6_pulse_windows', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_pulse_windows` (
+    id            INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    kind          VARCHAR(32)  NOT NULL,
+    domain        VARCHAR(16)  NOT NULL,
+    modifier      DOUBLE       NOT NULL,
+    target        VARCHAR(64)  NULL,
+    reason        VARCHAR(128) NOT NULL,
+    online_start  INT          NOT NULL DEFAULT 0,
+    started_at    BIGINT       NOT NULL,
+    ends_at       BIGINT       NOT NULL,
+    INDEX idx_palm6_pulse_windows_ends (ends_at)
+)]] },
+    { name = '0048 palm6_pulse_checkins', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_pulse_checkins` (
+    id          INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    window_id   INT          NOT NULL,
+    citizenid   VARCHAR(64)  NOT NULL,
+    ts          BIGINT       NOT NULL,
+    UNIQUE KEY uq_palm6_pulse_checkin (window_id, citizenid),
+    INDEX idx_palm6_pulse_checkins_cid (citizenid)
+)]] },
+    { name = '0048 palm6_pulse_streaks', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_pulse_streaks` (
+    citizenid       VARCHAR(64) NOT NULL PRIMARY KEY,
+    streak          INT         NOT NULL DEFAULT 0,
+    best_streak     INT         NOT NULL DEFAULT 0,
+    pulse_points    INT         NOT NULL DEFAULT 0,
+    last_window_id  INT         NOT NULL DEFAULT 0,
+    updated_at      BIGINT      NOT NULL DEFAULT 0
+)]] },
 }
 
 CreateThread(function()

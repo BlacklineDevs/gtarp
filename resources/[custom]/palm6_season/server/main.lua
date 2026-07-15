@@ -115,7 +115,7 @@ local function invalidate()
 end
 
 -- ---------------------------------------------------------------------------
--- The four read-only ladders. Each run(startsAt, limit) returns a normalised
+-- The read-only ladders. Each run(startsAt, limit) returns a normalised
 -- list { subject_id, label, score, display }. All pcall-guarded; a failed
 -- query yields an empty board, never an error.
 --
@@ -220,6 +220,33 @@ Ladders.dirty = { subject = 'citizen', run = function(startsAt, limit)
             label      = r.subject_id or '?',
             score      = score,
             display    = ('$%d'):format(score),
+        }
+    end
+    return out
+end }
+
+-- Ladder E: city pulse participation — season check-ins (palm6_pulse_checkins,
+-- windowed on starts_at via the epoch-seconds ts). Each pulse window allows one
+-- check-in per citizen (atomic UNIQUE), so this counts genuine engagement, not
+-- spam. Gives pulse_points/check-ins a real payoff. Only populates once pulse is
+-- active (Config.MinOnline players); an empty board otherwise.
+Ladders.pulse = { subject = 'citizen', run = function(startsAt, limit)
+    local rows
+    pcall(function()
+        rows = MySQL.query.await(
+            'SELECT citizenid AS subject_id, COUNT(*) AS score FROM palm6_pulse_checkins '
+            .. 'WHERE ts >= UNIX_TIMESTAMP(?) GROUP BY citizenid '
+            .. 'ORDER BY score DESC, subject_id ASC LIMIT ?',
+            { startsAt, limit })
+    end)
+    local out = {}
+    for _, r in ipairs(rows or {}) do
+        local score = tonumber(r.score) or 0
+        out[#out + 1] = {
+            subject_id = r.subject_id,
+            label      = r.subject_id or '?',
+            score      = score,
+            display    = ('%d check-ins'):format(score),
         }
     end
     return out

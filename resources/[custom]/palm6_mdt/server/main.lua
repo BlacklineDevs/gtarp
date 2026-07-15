@@ -467,6 +467,20 @@ local function cmdBook(src, args)
         return
     end
 
+    -- Post-bail re-arrest grace (palm6_yard): someone who just posted bail can't
+    -- be re-booked until their cooldown lapses — the designed anti-grief window
+    -- so bail isn't pointless. Soft cross-read; no-op if palm6_yard is absent.
+    if Bridge.ResourceStarted('palm6_yard') then
+        local graceLeft = 0
+        pcall(function() graceLeft = exports.palm6_yard:RearrestGraceLeft(target) or 0 end)
+        if graceLeft > 0 then
+            Bridge.Notify(src, 'MDT',
+                ('%s just posted bail — re-arrest grace for ~%d more min; you cannot book them yet.'):format(
+                    citizenName, math.ceil(graceLeft / 60)), 'error')
+            return
+        end
+    end
+
     local warrants = activeWarrantsFor(target)
     local officer = Bridge.GetPlayerName(src)
     local ok, bookingId = pcall(function()

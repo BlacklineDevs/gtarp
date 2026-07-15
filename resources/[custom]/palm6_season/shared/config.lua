@@ -48,8 +48,9 @@ Config.Ladders = {
     turf  = { title = 'Turf Held',              subject = 'gang'    },
     drugs = { title = 'Drug Empire',            subject = 'citizen' },
     dirty = { title = 'Dirtiest Hustler',       subject = 'citizen' },
+    pulse = { title = 'City Pulse (most active)', subject = 'citizen' },
     -- wanted = { title = 'Most Wanted',        subject = 'citizen' },  -- D2 variant
 }
 
 -- Deterministic display / archive order (string-keyed tables are unordered).
-Config.LadderOrder = { 'rep', 'turf', 'drugs', 'dirty' }
+Config.LadderOrder = { 'rep', 'turf', 'drugs', 'dirty', 'pulse' }

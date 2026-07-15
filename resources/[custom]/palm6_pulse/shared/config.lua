@@ -24,7 +24,9 @@ Config.MinOnline       = 4
 Config.MaxModifier     = 2.0   -- hard ceiling on any published multiplier
 
 -- Participation reward (NOT a purchase — a flat, once-per-window grant) --------
--- TODO(David): points have NO cash value (they feed the season scoreboard).
+-- Points/streaks have NO cash value. Season participation is scored by the
+-- 'pulse' ladder in palm6_season (counts check-ins during the season), so
+-- checking in feeds the season leaderboard + its end-of-season prize.
 Config.PointsPerCheckin = 10
 Config.StreakBonusPoints = 2    -- extra points per current-streak level, capped
 Config.StreakBonusCap    = 20   -- max streak bonus points per check-in

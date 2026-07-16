@@ -24,8 +24,7 @@
 local Coins = {}            -- coin id -> record (live + rugged; delisted drop out)
 local Locks = {}            -- coin id -> true while a fill/settlement is in flight
 local Shills = {}           -- coin id -> { expires = epoch }
-local Billboards = {}       -- billboard id -> { coords, label, expires }
-local NextBillboardId = 1
+local Billboards = {}       -- billboard id -> { coords, label, expires } (DB-backed)
 local Cooldowns = {}        -- citizenid -> { key -> epoch of last accepted use }
 
 -- In-flight ticker reservations. The uniqueness scan below only reads the
@@ -185,6 +184,20 @@ AddEventHandler('onResourceStart', function(resource)
         n = n + 1
     end
     print(('[palm6_pumpcoin] exchange online — %d coin(s) on the board'):format(n))
+
+    -- Rehydrate live billboards so a paid $2,500 blip survives a restart.
+    pcall(function()
+        MySQL.update.await('DELETE FROM palm6_pumpcoin_billboards WHERE expires_at <= ?', { now() })
+        local bs = MySQL.query.await(
+            'SELECT id, coord_x, coord_y, coord_z, label, expires_at FROM palm6_pumpcoin_billboards') or {}
+        for _, r in ipairs(bs) do
+            Billboards[tonumber(r.id)] = {
+                coords  = { x = tonumber(r.coord_x) or 0.0, y = tonumber(r.coord_y) or 0.0, z = tonumber(r.coord_z) or 0.0 },
+                label   = r.label,
+                expires = tonumber(r.expires_at) or 0,
+            }
+        end
+    end)
 
     -- Economics guard: the premine's curve value must stay under the mint
     -- cost, or delist settlements pay out more than minting cost (printer).
@@ -766,13 +779,28 @@ RegisterCommand('pumpboard', function(src, args)
         return
     end
 
-    local id = NextBillboardId
-    NextBillboardId = NextBillboardId + 1
-    Billboards[id] = {
-        coords = coords,
-        label = ('$%s %s'):format(coin.ticker, coin.emoji),
-        expires = now() + Config.BillboardDurationSec,
-    }
+    -- Persist the billboard so it survives a restart within its 30-min window
+    -- (it was memory-only, so a reboot silently destroyed a paid $2,500 blip
+    -- with no refund). The DB auto-increment id is the billboard id.
+    local label = ('$%s %s'):format(coin.ticker, coin.emoji)
+    local expires = now() + Config.BillboardDurationSec
+    local id
+    pcall(function()
+        id = MySQL.insert.await(
+            'INSERT INTO palm6_pumpcoin_billboards (coord_x, coord_y, coord_z, label, expires_at) '
+            .. 'VALUES (?, ?, ?, ?, ?)',
+            { coords.x, coords.y, coords.z, label, expires })
+    end)
+    if not id then
+        -- Write failed after the charge landed — refund so the player isn't billed
+        -- for a billboard that was never posted.
+        if not Bridge.CreditBank(src, Config.BillboardCost, 'pumpcoin-billboard-refund') then
+            Bridge.CreditBankByCitizenId(cid, Config.BillboardCost, 'pumpcoin-billboard-refund')
+        end
+        Bridge.Notify(src, 'Exchange', 'The billboard could not be posted — you were refunded.', 'error')
+        return
+    end
+    Billboards[id] = { coords = coords, label = label, expires = expires }
     TriggerClientEvent('palm6_pumpcoin:billboardAdd', -1, id, Billboards[id].coords, Billboards[id].label)
     Bridge.Notify(src, 'Exchange',
         ('Billboard live for %d minutes. Every grinder on the server can see it.')

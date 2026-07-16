@@ -221,12 +221,21 @@ local function cmdFcBet(src, args)
         return
     end
 
-    -- Atomic claim: the row only inserts if the match is STILL in the
-    -- betting window at the exact instant of insert (WHERE status =
-    -- 'betting' evaluated inside the same statement, no read-then-write
-    -- gap), and the schema's UNIQUE(match_id, citizenid) key rejects a
-    -- second bet from the same citizen outright — see the module header
-    -- for why this must be a DB constraint, not an in-memory check.
+    -- Consume-before-grant: take the stake FIRST. If the row were inserted
+    -- before the charge, a crash in that window would leave an unpaid-for bet
+    -- that still gets honored at resolution (minted money). Charging first means
+    -- the worst a crash can do is take a stake with no bet recorded (a rare
+    -- self-inflicted player loss, not a faucet), and we refund on any failure below.
+    if not Bridge.ChargeBank(src, amount, 'fightclub-bet') then
+        Bridge.Notify(src, 'Fight Club', ('You need $%d in the bank.'):format(amount), 'error')
+        return
+    end
+
+    -- Atomic claim: the row only inserts if the match is STILL in the betting
+    -- window at the exact instant of insert (WHERE status = 'betting' inside the
+    -- same statement, no read-then-write gap), and the schema's UNIQUE(match_id,
+    -- citizenid) key rejects a second bet outright — see the module header for why
+    -- this must be a DB constraint. On any failure the already-taken stake is refunded.
     local insOk, insId = pcall(function()
         return MySQL.insert.await([[
             INSERT INTO palm6_fightclub_bets (match_id, citizenid, fighter, amount)
@@ -235,17 +244,13 @@ local function cmdFcBet(src, args)
         ]], { matchId, cid, slot, amount, matchId })
     end)
     if not insOk then
+        Bridge.CreditBankByCitizenId(cid, amount, 'fightclub-bet-refund')
         Bridge.Notify(src, 'Fight Club', 'You already have a bet on this match.', 'error')
         return
     end
     if not insId or insId == 0 then
+        Bridge.CreditBankByCitizenId(cid, amount, 'fightclub-bet-refund')
         Bridge.Notify(src, 'Fight Club', 'Betting just closed on that match.', 'error')
-        return
-    end
-
-    if not Bridge.ChargeBank(src, amount, 'fightclub-bet') then
-        pcall(function() MySQL.update.await('DELETE FROM palm6_fightclub_bets WHERE id = ?', { insId }) end)
-        Bridge.Notify(src, 'Fight Club', ('You need $%d in the bank.'):format(amount), 'error')
         return
     end
 

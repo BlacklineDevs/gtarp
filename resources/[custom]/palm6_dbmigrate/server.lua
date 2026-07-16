@@ -154,6 +154,26 @@ ALTER TABLE `courier_postings` ADD COLUMN IF NOT EXISTS `picked_up` TINYINT NOT 
     -- 0051: persist turf rep-mint cooldown (see sql/0051). Idempotent ALTER.
     { name = '0051 turf rep_at column', sql = [[
 ALTER TABLE `palm6_turf` ADD COLUMN IF NOT EXISTS `rep_at` BIGINT NOT NULL DEFAULT 0]] },
+    -- 0052: persist counterfeit fence daily quota (see sql/0052).
+    { name = '0052 counterfeit_fence_quota', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_counterfeit_fence_quota` (
+    `cid`      VARCHAR(64) NOT NULL,
+    `fence_id` VARCHAR(64) NOT NULL,
+    `day_key`  VARCHAR(8)  NOT NULL,
+    `cnt`      INT         NOT NULL DEFAULT 0,
+    PRIMARY KEY (`cid`, `fence_id`, `day_key`)
+)]] },
+    -- 0053: persist pumpcoin billboards (see sql/0053).
+    { name = '0053 pumpcoin_billboards', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_pumpcoin_billboards` (
+    `id`         INT         NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `coord_x`    DOUBLE      NOT NULL,
+    `coord_y`    DOUBLE      NOT NULL,
+    `coord_z`    DOUBLE      NOT NULL,
+    `label`      VARCHAR(64) NOT NULL,
+    `expires_at` BIGINT      NOT NULL,
+    INDEX `idx_palm6_pumpcoin_billboards_exp` (`expires_at`)
+)]] },
 }
 
 CreateThread(function()

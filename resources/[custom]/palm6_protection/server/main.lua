@@ -13,6 +13,7 @@
 -- ============================================================================
 
 local lastAction  = {}   -- [src] = ts of last /shakedown (spam guard)
+AddEventHandler('playerDropped', function() lastAction[source] = nil end)  -- reclaim on disconnect
 local collectLock = {}   -- [business_id] = true while a shakedown is in flight
 
 math.randomseed(os.time())

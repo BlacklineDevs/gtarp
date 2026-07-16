@@ -12,6 +12,7 @@
 -- ============================================================================
 
 local lastAction  = {}   -- [src] = ts of last command (spam guard)
+AddEventHandler('playerDropped', function() lastAction[source] = nil end)  -- reclaim on disconnect
 local borrowLock  = {}   -- [citizenid] = true while a borrow is in flight
 local repayLock   = {}   -- [citizenid] = true while a repay is in flight
 local enabled     = false

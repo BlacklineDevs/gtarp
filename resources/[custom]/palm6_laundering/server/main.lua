@@ -13,6 +13,7 @@
 -- ============================================================================
 
 local lastAction = {}   -- [src] = ts of last /launder (spam guard)
+AddEventHandler('playerDropped', function() lastAction[source] = nil end)  -- reclaim on disconnect
 local frontHeat = 0.0   -- single-front heat accumulator (server-only, decays)
 
 math.randomseed(os.time())

@@ -391,6 +391,16 @@ AddEventHandler('onResourceStart', function(resource)
         end
     end)
 
+    -- Rehydrate today's fence quota so the per-day cash-out cap survives restart.
+    pcall(function()
+        local today = os.date('%Y%m%d')
+        local rows = MySQL.query.await(
+            'SELECT cid, fence_id, cnt FROM palm6_counterfeit_fence_quota WHERE day_key = ?', { today }) or {}
+        for _, r in ipairs(rows) do
+            fenceQuota[('%s|%s|%s'):format(r.cid, r.fence_id, today)] = tonumber(r.cnt) or 0
+        end
+    end)
+
     -- Usable items.
     Bridge.OnUseItem(ITEMS.Printer.name, function(src)
         if not itemsReady then return end
@@ -1038,6 +1048,14 @@ RegisterNetEvent('palm6_counterfeit:fence:pass', function(fenceId, serial)
 
     setCooldown(cid, 'fence')
     fenceQuota[qk] = (fenceQuota[qk] or 0) + 1  -- attempts count against quota
+    -- Persist the attempt so the daily quota survives a restart (an in-memory
+    -- counter reset to 0 on every reboot would defeat the per-day cap).
+    pcall(function()
+        MySQL.insert.await(
+            'INSERT INTO palm6_counterfeit_fence_quota (cid, fence_id, day_key, cnt) VALUES (?, ?, ?, 1) '
+            .. 'ON DUPLICATE KEY UPDATE cnt = cnt + 1',
+            { cid, fenceId, os.date('%Y%m%d') })
+    end)
     local name = Bridge.GetPlayerName(src)
 
     -- Quality decays with greed: rejection rises with the batch's

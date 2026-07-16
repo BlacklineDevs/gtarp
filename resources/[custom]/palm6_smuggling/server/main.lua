@@ -12,6 +12,7 @@
 -- ============================================================================
 
 local lastStart = {}   -- [src] = ts of last /smuggle (spam guard)
+AddEventHandler('playerDropped', function() lastStart[source] = nil end)  -- reclaim on disconnect
 local runLock   = {}   -- [citizenid] = true while a start/deliver is in flight
 local enabled   = false
 

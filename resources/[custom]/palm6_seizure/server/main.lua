@@ -12,6 +12,7 @@
 -- ============================================================================
 
 local lastAction = {}   -- [src] = ts of last /seizedirty (spam guard)
+AddEventHandler('playerDropped', function() lastAction[source] = nil end)  -- reclaim on disconnect
 local seizeLock  = {}   -- [suspect citizenid] = true while a seizure is in flight
 
 local function now() return os.time() end

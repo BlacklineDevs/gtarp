@@ -24,6 +24,7 @@
 -- ============================================================================
 
 local lastAction = {}    -- [src] = { [key] = ts } — chat-command spam guard
+AddEventHandler('playerDropped', function() lastAction[source] = nil end)  -- reclaim on disconnect
 local lastKidnapBy = {}  -- [kidnapperCid] = { victimCid, victimName, ts } — validated kidnap, pending a demand
 
 local function now() return os.time() end

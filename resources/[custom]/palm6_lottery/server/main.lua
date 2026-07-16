@@ -431,6 +431,14 @@ AddEventHandler('onResourceStart', function(resource)
         Wait(3000) -- let oxmysql establish its connection first
         math.randomseed(GetGameTimer() + os.time())
         ensureSchema()
+        -- Self-heal a draw that crashed mid-resolve: a row stuck in the transient
+        -- 'drawing' status (process died between the open->drawing claim and the
+        -- drawing->drawn finalize) was never drawn, so its tickets are intact —
+        -- reopen it so it draws normally instead of orphaning the pot forever.
+        pcall(function()
+            MySQL.update.await(
+                "UPDATE palm6_lottery_draws SET status = 'open' WHERE status = 'drawing'")
+        end)
         ensureOpenDraw()
 
         local draw = currentOpenDraw()

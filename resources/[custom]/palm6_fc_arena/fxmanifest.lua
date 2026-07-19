@@ -14,6 +14,7 @@ shared_scripts {
 client_scripts {
     'bridge/cl_game.lua',       -- native / ox_lib adapter, before client logic
     'client/main.lua',
+    'client/audio.lua',         -- minimum Def Jam arena audio (native PlaySoundFrontend, §12)
 }
 
 server_scripts {

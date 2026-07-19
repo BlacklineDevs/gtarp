@@ -58,6 +58,18 @@ local function guard(eventName, budget)
         local b = bucket(eventName, src)
         prune(b, budget.window_seconds)
         if #b.calls >= budget.calls then
+            -- Combat-class budget (fc striking/finisher mash): DROP the
+            -- over-budget event but NEVER call record() — no violation row,
+            -- no Violations[src]++ , no 3-strike kick. A legit flurry of
+            -- palm6_fc_combat:strike/connect/block/break can burst past the
+            -- budget; the server move-clock (palm6_fc_combat) — not eventguard
+            -- — is the combat authority, and the §7 finisher :break mash would
+            -- trip the kick model instantly. Money/menu events keep the
+            -- strike-and-kick model via record() below.
+            if budget.class == 'combat' then
+                CancelEvent()
+                return
+            end
             record(src, eventName, ('over budget %d/%ds'):format(
                 budget.calls, budget.window_seconds))
             CancelEvent()

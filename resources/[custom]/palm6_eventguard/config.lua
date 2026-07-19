@@ -239,4 +239,22 @@ Config.Events = {
     -- guard already applies; this budgets the net-event surface too. eventguard
     -- ensures before palm6_gunrunning so this registers first.
     ['palm6_gunrunning:dealer:buy'] = { calls = 10, window_seconds = 60 },
+
+    -- palm6_fc_combat — Def Jam fight-club engine (Phase 0). challenge/accept/
+    -- decline/select are low-frequency MENU events → the normal kick model.
+    -- The LIVE-combat events (strike/connect/block/break) fire many times a
+    -- second per fighter and carry class='combat' so the guard DROPS an
+    -- over-budget event WITHOUT the 3-strike session kick (see server/main.lua
+    -- guard()): the server move-clock is the authority, and the §7 finisher
+    -- :break mash would trip a kick model instantly. custom.cfg ensures
+    -- palm6_eventguard BEFORE palm6_fc_combat so these register first in the
+    -- handler chain (same requirement as palm6_robbery/turf/drugs/gangs above).
+    ['palm6_fc_combat:challenge'] = { calls = 10, window_seconds = 60 },
+    ['palm6_fc_combat:accept']    = { calls = 10, window_seconds = 60 },
+    ['palm6_fc_combat:decline']   = { calls = 10, window_seconds = 60 },
+    ['palm6_fc_combat:select']    = { calls = 15, window_seconds = 60 },
+    ['palm6_fc_combat:strike']    = { calls = 60, window_seconds = 10, class = 'combat' },
+    ['palm6_fc_combat:connect']   = { calls = 60, window_seconds = 10, class = 'combat' },
+    ['palm6_fc_combat:block']     = { calls = 40, window_seconds = 10, class = 'combat' },
+    ['palm6_fc_combat:break']     = { calls = 80, window_seconds = 10, class = 'combat' },
 }

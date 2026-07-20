@@ -62,7 +62,7 @@ RegisterNetEvent('palm6_racing:start', function(d)
             if hud ~= lastHud then Game.ShowHud(hud); lastHud = hud end
 
             local pc = Game.LocalCoords()
-            if pc and Game.Dist(pc, cp) <= race.radius and not race.pending then
+            if pc and Game.Dist2D(pc, cp) <= race.radius and not race.pending then
                 race.pending = true
                 race.pendingAt = GetGameTimer()
                 TriggerServerEvent('palm6_racing:checkpoint', { raceId = race.raceId, cpIndex = race.nextIndex })

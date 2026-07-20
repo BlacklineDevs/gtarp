@@ -23,6 +23,14 @@ function Game.Dist(a, b)
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
+-- 2D (x,y) distance — checkpoint detection uses the ground plane so a mis-set
+-- checkpoint z never makes a CP unreachable (matches the server proximity check).
+function Game.Dist2D(a, b)
+    if not a or not b then return math.huge end
+    local dx, dy = a.x - b.x, a.y - b.y
+    return math.sqrt(dx * dx + dy * dy)
+end
+
 function Game.Notify(opts) lib.notify(opts) end
 
 function Game.OpenMenu(id, title, options)

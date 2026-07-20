@@ -22,9 +22,11 @@ server_scripts {
     'server/main.lua',
 }
 
+-- ox_target is a SOFT dependency (runtime-detected in cl_game.lua with an ox_lib
+-- marker+[E] fallback), so it is intentionally NOT listed here — listing it would
+-- make the fallback dead code by refusing to start without ox_target (audit).
 dependencies {
     'ox_lib',
     'oxmysql',
     'qbx_core',
-    'ox_target',
 }

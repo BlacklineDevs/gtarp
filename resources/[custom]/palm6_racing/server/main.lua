@@ -17,11 +17,20 @@ local activeByCid  = {}    -- [cid] = raceId  (a driver is in at most one race)
 local activeBySrc  = {}    -- [src] = raceId  (playerDropped routing)
 local raceSeq      = 0
 local lastAction   = {}    -- [src][key] = ts — command spam guard
+local lastCpEvent  = {}    -- [src] = GetGameTimer() ms — cheap checkpoint-event anti-spam
+local cpBuffers    = {}    -- [tostring(src)] = { {x,y,z}, ... } — admin route-builder capture
 local bootDone     = false
 
 local RATE = { startrace = 5, joinrace = 2, racego = 2, raceleave = 2, races = 2, racetop = 3, racecp = 1 }
 
 local function now() return os.time() end
+
+-- 2D (x,y) distance — checkpoint proximity is measured on the ground plane so a
+-- mis-set checkpoint z can never make it unreachable or bypassable (audit).
+local function dist2d(a, b)
+    local dx, dy = a.x - b.x, a.y - b.y
+    return math.sqrt(dx * dx + dy * dy)
+end
 
 local function dbg(msg) if Config and Config.Debug then print('[palm6_racing] ' .. msg) end end
 
@@ -131,8 +140,12 @@ local function resolveRace(raceId, reason)
     end
     table.sort(finishers, function(a, b) return (a.place or 99) < (b.place or 99) end)
 
+    -- solo/podium rep keys off who actually FINISHED (#finishers), NOT roster size:
+    -- a passive alt or a DNF can neither lift a lone driver out of the solo rep
+    -- fraction nor turn a 2-car field into a "podium" payout (audit: SoloRepFactor
+    -- bypass + podium-band amplification). fieldSize below is DISPLAY-only.
     local fieldSize = #r.racerOrder
-    local solo = fieldSize <= 1
+    local solo = #finishers <= 1
     for _, rc in pairs(r.racers) do
         if rc.src then
             TriggerClientEvent('palm6_racing:result', rc.src, {
@@ -193,7 +206,7 @@ local function startCountdownThenLive(raceId)
         if rc and rc.src then
             TriggerClientEvent('palm6_racing:start', rc.src,
                 { raceId = raceId, checkpoints = cps, radius = Config.Race.CheckpointRadius or 15.0,
-                  countdown = cd, pollMs = Config.Race.PollMs or 250 })
+                  countdown = cd })
         end
     end
     CreateThread(function()
@@ -282,6 +295,7 @@ end
 
 local function cmdRaceGo(src)
     if src == 0 then return end
+    if not enabled() then return end   -- dark-ship: silent no-op while disabled (audit)
     if not rl(src, 'racego') then return end
     local cid = Bridge.GetCitizenId(src)
     if not cid then return end
@@ -293,6 +307,7 @@ end
 
 local function cmdRaceLeave(src)
     if src == 0 then return end
+    if not enabled() then return end   -- dark-ship: silent no-op while disabled (audit)
     if not rl(src, 'raceleave') then return end
     local cid = Bridge.GetCitizenId(src)
     if not cid then return end
@@ -335,6 +350,7 @@ end
 
 local function cmdRaces(src)
     if src == 0 then return end
+    if not enabled() then return end   -- dark-ship: silent no-op while disabled (audit)
     if not rl(src, 'races') then return end
     local _, r = currentActiveRace()
     if not r then Bridge.Reply(src, { 'No race forming. Get in a car at the meet and /startrace.' }); return end
@@ -354,6 +370,11 @@ end
 RegisterNetEvent('palm6_racing:checkpoint', function(payload)
     local src = source
     if not enabled() or type(payload) ~= 'table' then return end
+    -- cheap per-src anti-spam BEFORE any export/native work (audit: the hot checkpoint
+    -- event had no throttle; a modified client could hammer GetCitizenId/GetCoords).
+    local tms = GetGameTimer()
+    if (tms - (lastCpEvent[src] or 0)) < (Config.Race.CheckpointEventMs or 120) then return end
+    lastCpEvent[src] = tms
     local raceId = tonumber(payload.raceId)
     local cpIndex = tonumber(payload.cpIndex)
     if not raceId or not cpIndex then return end
@@ -368,19 +389,22 @@ RegisterNetEvent('palm6_racing:checkpoint', function(payload)
     local cp = r.route.checkpoints[cpIndex]
     if not cp then return end
 
-    local nowMs = now()
-    if (nowMs - (rc.lastCpAt or 0)) < (Config.Race.MinCheckpointSec or 1) then return end  -- teleport/skip guard
+    -- teleport/skip guard: min REAL interval between accepts, in MILLISECONDS (audit:
+    -- os.time seconds made sub-second tuning a no-op and the guard weak).
+    if (tms - (rc.lastCpAt or 0)) < (Config.Race.MinCheckpointMs or 900) then return end
 
-    -- server-coord proximity: the driver must ACTUALLY be near the checkpoint. Radius
-    -- is padded generously over the client radius so honest lag never false-rejects.
+    -- server-coord proximity, FAIL-CLOSED + 2D (audit): a missing server ped position
+    -- now REJECTS the checkpoint (was skipped -> fail-open), and distance is x/y only so
+    -- a mis-set checkpoint z can never make a CP unreachable OR bypassable via altitude.
     local coords = Bridge.GetCoords(src)
+    if not coords then return end
     local tol = (Config.Race.CheckpointRadius or 15.0) * 2.0 + 10.0
-    if coords and Bridge.Distance(coords, cp) > tol then
-        dbg(('race #%d: %s CP%d rejected — %.0fm from checkpoint'):format(raceId, cid, cpIndex, Bridge.Distance(coords, cp)))
+    if dist2d(coords, cp) > tol then
+        dbg(('race #%d: %s CP%d rejected — %.0fm (2D) from checkpoint'):format(raceId, cid, cpIndex, dist2d(coords, cp)))
         return
     end
 
-    rc.lastCpAt = nowMs
+    rc.lastCpAt = tms
     rc.cpIndex = cpIndex + 1
     if cpIndex >= #r.route.checkpoints then
         finishRacer(r, rc)                                          -- crossed the final checkpoint
@@ -394,6 +418,10 @@ end)
 -- ---------------------------------------------------------------------------
 AddEventHandler('playerDropped', function()
     local src = source
+    -- free every src-keyed map so they can't grow over the server's lifetime (audit).
+    lastAction[src]  = nil
+    lastCpEvent[src]  = nil
+    cpBuffers[tostring(src)] = nil
     local raceId = activeBySrc[src]
     if not raceId then return end
     local r = races[raceId]
@@ -447,13 +475,15 @@ local function rankForRep(rep)
 end
 
 local function repDailyCount(cid)
-    local n = 0
+    local n, ok = 0, false
     pcall(function()
         local row = MySQL.single.await(
             "SELECT COUNT(*) AS n FROM palm6_racing_results WHERE citizenid = ? AND rep > 0 AND created_at >= (NOW() - INTERVAL 24 HOUR)",
             { cid })
-        if row then n = tonumber(row.n) or 0 end
+        n = tonumber(row and row.n) or 0
+        ok = true
     end)
+    if not ok then return math.huge end   -- FAIL-CLOSED: a farm-guard read failure counts AS capped (audit)
     return n
 end
 
@@ -464,7 +494,7 @@ local function bumpProgression(cid, name, repGain, won)
             VALUES (?, ?, ?, ?, 1, 0)
             ON DUPLICATE KEY UPDATE
                 name = VALUES(name), rep = rep + VALUES(rep), wins = wins + VALUES(wins), races = races + 1
-        ]], { cid, name or cid, repGain, won and 1 or 0 })
+        ]], { cid, (name or cid):sub(1, 64), repGain, won and 1 or 0 })   -- clamp to the VARCHAR(64) (audit)
     end)
     local newRep = repGain
     pcall(function()
@@ -479,24 +509,33 @@ end
 -- assign the forward-declared local (resolveRace calls this by name at runtime).
 awardResults = function(r, finishers, solo)
     local cfg = Config.Rep or {}
+    local field = #finishers    -- real competitive field (audit: podium band must not
+                                -- pay 2nd/3rd in a 2-car field where everyone podiums).
     for _, rc in ipairs(finishers) do
+        -- podium rep (2nd/3rd) ONLY if you actually beat another finisher (place < field,
+        -- i.e. not last). So the loser of a 1v1 gets the finish floor, not podium — this
+        -- stays fair to legit 3+ car races while cutting collusion value.
         local base
         if rc.place == 1 then base = cfg.RepPerWin or 50
-        elseif rc.place == 2 or rc.place == 3 then base = cfg.RepPerPodium or 20
+        elseif (rc.place == 2 or rc.place == 3) and rc.place < field then base = cfg.RepPerPodium or 20
         else base = cfg.RepPerFinish or 5 end
         if solo then base = math.floor(base * (cfg.SoloRepFactor or 0.25)) end
 
         local capped  = repDailyCount(rc.cid) >= (cfg.DailyRepCap or 12)
         local repGain = capped and 0 or base
 
+        -- the results row IS the cap ledger; only bump the progression aggregate if it
+        -- actually landed, so a partial DB failure can't grant laddered rep past the cap
+        -- (audit: results/progression divergence). The reverse (row, no rep) is safe.
+        local logged = false
         pcall(function()
-            MySQL.insert.await(
+            logged = MySQL.insert.await(
                 "INSERT INTO palm6_racing_results (citizenid, route_id, place, rep) VALUES (?, ?, ?, ?)",
-                { rc.cid, r.routeId, rc.place, repGain })
+                { rc.cid, r.routeId, rc.place, repGain }) ~= nil
         end)
-        bumpProgression(rc.cid, rc.name, repGain, rc.place == 1)
+        if logged then bumpProgression(rc.cid, rc.name, repGain, rc.place == 1) end
 
-        if rc.src and repGain > 0 then
+        if rc.src and logged and repGain > 0 then
             Bridge.Notify(rc.src, 'Racing', ('P%d — +%d rep.'):format(rc.place, repGain), rc.place == 1 and 'success' or 'inform')
         elseif rc.src and capped then
             Bridge.Notify(rc.src, 'Racing', ('P%d — no rep (daily cap).'):format(rc.place), 'inform')
@@ -506,6 +545,7 @@ end
 
 local function cmdRaceTop(src)
     if src == 0 then return end
+    if not enabled() then return end   -- dark-ship: no DB query while disabled (audit)
     if not rl(src, 'racetop') then return end
     local rows = {}
     pcall(function()
@@ -526,8 +566,9 @@ end
 -- print a ready-to-paste `checkpoints = { ... }` block for shared/config.lua.
 -- Ace-gated (palm6_racing.admin). Solves the "placeholder coords" problem in-game.
 -- ---------------------------------------------------------------------------
-local cpBuffers = {}   -- [key] = { {x,y,z}, ... }
-local function cpKey(src) return Bridge.GetCitizenId(src) or ('src' .. tostring(src)) end
+-- cpBuffers is declared at the top (state block) so playerDropped can free it. Keyed
+-- by src (a route build is one session) so a disconnect reliably reclaims the buffer.
+local function cpKey(src) return tostring(src) end
 
 local function cmdRaceCp(src)
     if not Bridge.IsAdmin(src) then return end
@@ -558,6 +599,17 @@ local function cmdRaceCpClear(src)
     Bridge.Reply(src, { 'Checkpoint buffer cleared.' })
 end
 
+-- Admin recovery for a wedged lobby/live race (audit: no way to clear a stuck meet
+-- short of the 7-min DNF timeout). Resolves the current race immediately (no rep for
+-- unfinished drivers) and frees the meet.
+local function cmdRaceCancel(src)
+    if not Bridge.IsAdmin(src) then return end
+    local raceId = currentActiveRace()
+    if not raceId then Bridge.Reply(src, { 'No active race to cancel.' }); return end
+    resolveRace(raceId, 'admin-cancel')
+    Bridge.Reply(src, { ('Race #%d cancelled — meet is free.'):format(raceId) })
+end
+
 Bridge.RegisterCommand('startrace', function(source, args) cmdStartRace(source, args) end)
 Bridge.RegisterCommand('joinrace', function(source) cmdJoinRace(source) end)
 Bridge.RegisterCommand('racego', function(source) cmdRaceGo(source) end)
@@ -567,3 +619,4 @@ Bridge.RegisterCommand('racetop', function(source) cmdRaceTop(source) end)
 Bridge.RegisterCommand('racecp', function(source) cmdRaceCp(source) end)
 Bridge.RegisterCommand('racecpdump', function(source) cmdRaceCpDump(source) end)
 Bridge.RegisterCommand('racecpclear', function(source) cmdRaceCpClear(source) end)
+Bridge.RegisterCommand('racecancel', function(source) cmdRaceCancel(source) end)

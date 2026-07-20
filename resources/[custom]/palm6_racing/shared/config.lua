@@ -44,10 +44,10 @@ Config.Lobby = {
 
 -- Anti-cheat + race rules.
 Config.Race = {
-    CheckpointRadius = 15.0,   -- pass distance (m) — generous so it is forgiving at speed
-    MinCheckpointSec = 1.0,    -- reject a checkpoint hit sooner than this after the last (teleport/skip guard)
-    DnfTimeoutSec    = 420,    -- race force-ends (all unfinished = DNF) after this
-    PollMs           = 250,    -- client checkpoint-proximity poll cadence
+    CheckpointRadius  = 15.0,  -- pass distance (m), measured 2D (x,y) so a mis-set z can't wall a CP off
+    MinCheckpointMs   = 900,   -- min REAL interval (ms) between checkpoint accepts — teleport/skip guard
+    CheckpointEventMs = 120,   -- min interval (ms) between accepted checkpoint EVENTS per player (anti-spam)
+    DnfTimeoutSec     = 420,   -- race force-ends (all unfinished = DNF) after this
 }
 
 -- Progression (rep is DISPLAY/LADDER only in Phase 0 — no cash, so nothing to farm

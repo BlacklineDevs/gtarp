@@ -79,11 +79,16 @@ function Bridge.CreditBankByCitizenId(citizenid, amount, reason)
             if ok then return true end
         end
     end
-    return pcall(function()
-        MySQL.update.await(
+    -- Offline fallback. Return true ONLY if a row was actually updated — a 0-row
+    -- result (e.g. a since-deleted character) must return false so the caller
+    -- (settlePayout) takes the refund path instead of burning the payout against a
+    -- non-existent payee. reconcilePending now depends on this boolean being honest.
+    local ok, affected = pcall(function()
+        return MySQL.update.await(
             "UPDATE players SET money = JSON_SET(money, '$.bank', CAST(JSON_EXTRACT(money,'$.bank') AS UNSIGNED) + ?) WHERE citizenid = ?",
             { amount, citizenid })
-    end) and true or false
+    end)
+    return ok and (tonumber(affected) or 0) > 0
 end
 
 -- ---------------------------------------------------------------------------

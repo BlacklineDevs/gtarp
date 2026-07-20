@@ -507,6 +507,21 @@ CREATE TABLE IF NOT EXISTS `palm6_business_ledger` (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_palm6_business_ledger_biz (business_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
+    -- 0068 recoverable-payout columns via ALTER (NOT only the CREATE above): the
+    -- CREATE TABLE IF NOT EXISTS is a no-op on any DB where palm6_businesses was
+    -- already created by an earlier boot (510b13e), so it would NOT add these
+    -- columns there — mirroring the recoverability sweep's ALTER pattern
+    -- (0054-0063) guarantees the pending marker lands on an existing table too.
+    -- DEFAULT 0 on pending_amount is load-bearing (debitAccountWithPending's
+    -- WHERE pending_amount = 0 guard must match on rows that predate the column).
+    { name = '0068 business pending_cid', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `pending_cid` VARCHAR(64) NULL]] },
+    { name = '0068 business pending_amount', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `pending_amount` BIGINT UNSIGNED NOT NULL DEFAULT 0]] },
+    { name = '0068 business pending_at', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `pending_at` BIGINT UNSIGNED NOT NULL DEFAULT 0]] },
+    { name = '0068 business pending index', sql = [[
+CREATE INDEX IF NOT EXISTS `idx_palm6_business_pending` ON `palm6_businesses` (`pending_amount`)]] },
 }
 
 CreateThread(function()

@@ -278,9 +278,17 @@ local function settlePayout(businessId, payeeCid, amount, reason)
     -- returns nil — e.g. it was closed in a race the settleBusy guard didn't cover),
     -- send the money straight to the payee's bank instead of dropping it. Belt to the
     -- settleBusy braces: the payout money is never destroyed.
+    -- The nil-detection relies on `amount > 0` (a +0 credit could report 0 changed
+    -- rows and spuriously orphan-refund) — all three settle callers guarantee it:
+    -- withdraw clamps to MinAmount>=1, payroll filters wage>0, close settles only when
+    -- amount>0. Keep that invariant if a new settle caller is ever added.
     if not creditAccount(businessId, amount, payeeCid, 'payout-refund', 'Payout reversed (credit failed)') then
         Bridge.CreditBankByCitizenId(payeeCid, amount, 'business-payout-orphan-refund')
     end
+    -- NOTE (liveness, money-safe): settleBusy is cleared inline on each return rather
+    -- than in a finally. A thrown DB await (DB down) would leave it set, making the
+    -- business un-closeable until resource restart — fail-safe (the durable pending
+    -- marker + boot reconcile govern the money regardless), not money-stranding.
     settleBusy[businessId] = nil
     return 'lost'
 end

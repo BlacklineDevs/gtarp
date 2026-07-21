@@ -369,6 +369,12 @@ Config.Interior = {
 
     -- Owner-selectable dressing styles. This is the knob that makes two
     -- restaurants look different. Extend freely; keys are validated on write.
+    -- 🔶 VERIFY IN-GAME: these are STARTER layouts. The prop model names are
+    -- base-game props but have NOT been confirmed to render in this build (there
+    -- is no offline way to check a GTA model name). An unknown name is SKIPPED,
+    -- never fatal — so the worst case is a sparser room, not a crash. Walk each
+    -- layout with a prop viewer and swap any that don't show; each layout already
+    -- carries at least one high-confidence prop so none is ever fully empty.
     Layouts = {
         { key = 'bare',     label = 'Bare',          props = {} },
         { key = 'stocked',  label = 'Stocked',       props = {

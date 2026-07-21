@@ -237,6 +237,7 @@ local function spawnLayout(layout, anchor)
     if not layout or not layout.props then return end
     local cap = (Config.Interior and Config.Interior.MaxPropsPerLayout) or 24
     local timeout = (Config.Interior and Config.Interior.PropLoadTimeoutMs) or 3000
+    local skipped = {}
     for i, p in ipairs(layout.props) do
         if i > cap then break end
         local hash = loadModel(p.model, timeout)
@@ -250,7 +251,16 @@ local function spawnLayout(layout, anchor)
                 spawnedProps[#spawnedProps + 1] = obj
             end
             SetModelAsNoLongerNeeded(hash)
+        else
+            skipped[#skipped + 1] = tostring(p.model)
         end
+    end
+    -- Surface bad prop names once per entry so the config's UNVERIFIED starter
+    -- layouts can be tuned by just walking in and reading the console, instead of
+    -- eyeballing a prop viewer. Skips are already non-fatal; this only names them.
+    if #skipped > 0 then
+        print(('[palm6_business] layout "%s": %d prop(s) failed to load (bad model name?): %s')
+            :format(layout.key or '?', #skipped, table.concat(skipped, ', ')))
     end
 end
 

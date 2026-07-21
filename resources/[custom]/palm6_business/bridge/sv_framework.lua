@@ -79,11 +79,16 @@ function Bridge.CreditBankByCitizenId(citizenid, amount, reason)
             if ok then return true end
         end
     end
-    return pcall(function()
-        MySQL.update.await(
+    -- Offline fallback. Return true ONLY if a row was actually updated — a 0-row
+    -- result (e.g. a since-deleted character) must return false so the caller
+    -- (settlePayout) takes the refund path instead of burning the payout against a
+    -- non-existent payee. reconcilePending now depends on this boolean being honest.
+    local ok, affected = pcall(function()
+        return MySQL.update.await(
             "UPDATE players SET money = JSON_SET(money, '$.bank', CAST(JSON_EXTRACT(money,'$.bank') AS UNSIGNED) + ?) WHERE citizenid = ?",
             { amount, citizenid })
-    end) and true or false
+    end)
+    return ok and (tonumber(affected) or 0) > 0
 end
 
 -- ---------------------------------------------------------------------------
@@ -119,6 +124,23 @@ end
 function Bridge.Distance(a, b)
     local dx, dy, dz = a.x - b.x, a.y - b.y, (a.z or 0) - (b.z or 0)
     return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- Caller's ped heading (0-360), or 0.0. Phase-1 storefront placement captures it
+-- server-side so a future greeter ped faces the right way — never client-supplied.
+function Bridge.GetHeading(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return 0.0 end
+    return GetEntityHeading(ped) or 0.0
+end
+
+-- Best-effort police alert (robbery). Soft: fires qbx_police's dispatch event only
+-- if that resource is running, pcall-guarded so a missing/renamed handler never
+-- errors the robbery. No hard dependency — if no police system is present, the
+-- robbery still completes silently.
+function Bridge.PoliceAlert(src, text)
+    if GetResourceState('qbx_police') ~= 'started' then return end
+    pcall(function() TriggerEvent('police:server:policeAlert', text, nil, src) end)
 end
 
 -- ---------------------------------------------------------------------------

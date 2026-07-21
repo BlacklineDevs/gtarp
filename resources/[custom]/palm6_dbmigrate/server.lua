@@ -484,7 +484,8 @@ CREATE TABLE IF NOT EXISTS `palm6_businesses` (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_palm6_business_name (name),
-    INDEX idx_palm6_business_owner (owner_cid)
+    INDEX idx_palm6_business_owner (owner_cid),
+    INDEX idx_palm6_business_pending (pending_amount)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
     { name = '0068 palm6_business_members', sql = [[
 CREATE TABLE IF NOT EXISTS `palm6_business_members` (
@@ -519,6 +520,71 @@ ALTER TABLE `palm6_businesses`
     ADD COLUMN IF NOT EXISTS `pending_cid`    VARCHAR(64)     NULL              AFTER `day_npc_income`,
     ADD COLUMN IF NOT EXISTS `pending_amount` BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER `pending_cid`,
     ADD COLUMN IF NOT EXISTS `pending_at`     BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER `pending_amount`]] },
+    -- 0068 recoverable-payout columns via ALTER (NOT only the CREATE above): the
+    -- CREATE TABLE IF NOT EXISTS is a no-op on any DB where palm6_businesses was
+    -- already created by an earlier boot (510b13e), so it would NOT add these
+    -- columns there — mirroring the recoverability sweep's ALTER pattern
+    -- (0054-0063) guarantees the pending marker lands on an existing table too.
+    -- DEFAULT 0 on pending_amount is load-bearing (debitAccountWithPending's
+    -- WHERE pending_amount = 0 guard must match on rows that predate the column).
+    { name = '0068 business pending_cid', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `pending_cid` VARCHAR(64) NULL]] },
+    { name = '0068 business pending_amount', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `pending_amount` BIGINT UNSIGNED NOT NULL DEFAULT 0]] },
+    { name = '0068 business pending_at', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `pending_at` BIGINT UNSIGNED NOT NULL DEFAULT 0]] },
+    { name = '0068 business pending index', sql = [[
+CREATE INDEX IF NOT EXISTS `idx_palm6_business_pending` ON `palm6_businesses` (`pending_amount`)]] },
+    -- 0009: the connect-gate `allowlist` table (see sql/0009_allowlist.sql). It was
+    -- ONLY in the standalone sql file, never registered here — so on a fresh/rebuilt
+    -- prod DB (which is not reachable from outside the panel network) it would be
+    -- ABSENT, and palm6_allowlist's connect query would throw and HANG every join.
+    -- Registered here so it always exists on boot. IF NOT EXISTS -> no-op where 0009
+    -- already applied. (palm6_allowlist also now pcall-guards the read as a backstop.)
+    { name = '0009 allowlist', sql = [[
+CREATE TABLE IF NOT EXISTS `allowlist` (
+    `id`         INT AUTO_INCREMENT PRIMARY KEY,
+    `identifier` VARCHAR(100) NOT NULL UNIQUE,
+    `note`       VARCHAR(255) DEFAULT NULL,
+    `enabled`    TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
+    -- 0070: palm6_business Phase 1 — PHYSICAL STOREFRONTS. Adds a map location +
+    -- blip appearance to an existing business so it becomes a PLACE on the map, not
+    -- just a menu. All columns nullable via ADD COLUMN IF NOT EXISTS (the 0068
+    -- pending-column pattern) so a business with no storefront set behaves exactly
+    -- like Phase 0. NO money columns here — storefronts touch presentation/location
+    -- only; the account/faucet invariants are untouched. loc_h = heading (for a
+    -- future greeter ped); blip_sprite/blip_color are owner cosmetics validated
+    -- server-side against Config.Storefront allowlists before write.
+    { name = '0070 business loc_x', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `loc_x` DOUBLE NULL]] },
+    { name = '0070 business loc_y', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `loc_y` DOUBLE NULL]] },
+    { name = '0070 business loc_z', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `loc_z` DOUBLE NULL]] },
+    { name = '0070 business loc_h', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `loc_h` DOUBLE NULL]] },
+    { name = '0070 business blip_sprite', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `blip_sprite` SMALLINT UNSIGNED NULL]] },
+    { name = '0070 business blip_color', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `blip_color` TINYINT UNSIGNED NULL]] },
+    { name = '0070 business loc index', sql = [[
+CREATE INDEX IF NOT EXISTS `idx_palm6_business_loc` ON `palm6_businesses` (`loc_x`)]] },
+    -- 0071: palm6_business Phase 1 — manager delegate payroll DAY-LOCK. A nullable
+    -- per-member marker of the last UTC day they were paid; opPayroll only enforces
+    -- it while Config.ManagerRole is on, so each member is paid at most once per
+    -- period when delegated management is active (bounds a manager's payroll to the
+    -- owner-authorised wage once/day — no repeat-payroll account drain). Nullable
+    -- ADD COLUMN IF NOT EXISTS (0068 pending pattern); no effect while dark.
+    { name = '0071 business_members last_payroll_day', sql = [[
+ALTER TABLE `palm6_business_members` ADD COLUMN IF NOT EXISTS `last_payroll_day` VARCHAR(10) NULL]] },
+    -- 0072: palm6_business robbery cooldown — the epoch a business's register was
+    -- last cracked. opRob stamps + guards on it atomically (per-business cooldown).
+    -- Nullable, ADD COLUMN IF NOT EXISTS (0068 pending pattern); no effect while the
+    -- robbery feature is dark.
+    { name = '0072 business last_robbed_at', sql = [[
+ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `last_robbed_at` BIGINT UNSIGNED NULL]] },
 }
 
 CreateThread(function()

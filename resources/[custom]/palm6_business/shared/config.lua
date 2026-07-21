@@ -21,7 +21,74 @@ Config.Debug = false
 -- MASTER GATE. false = prod-inert: commands refuse, net events early-return,
 -- nothing player-facing registers. Flip true (+ redeploy) to go live, batched
 -- with a feel-test. Mirrors the palm6_racing / palm6_fc_core dark-ship idiom.
+-- LIVE in production (preserved across the feat->main merge; the new Phase-1 gates
+-- below stay false so only the hardened Phase-0 core is active).
 Config.Enabled = true
+
+-- PHASE 1 GATE — physical storefronts (map location + blip + walk-up target;
+-- proximity-gated management; storefront-anchored serving). Independent of
+-- Config.Enabled so enabling Phase 0 does NOT auto-enable storefronts: BOTH must
+-- be true for any storefront code path to run. Flip true (+ redeploy) only after
+-- the Phase 1 feel-test. false = Phase 0 behaves exactly as it does today (a
+-- business with no storefront row is indistinguishable from a Phase-0 business).
+Config.Phase1Enabled = false
+
+-- PER-TYPE MECHANICS GATE — gives each business type its own economic identity
+-- (payout / supply cost / cooldown / daily cap / supply cap) and a themed serve
+-- interaction (verb, nouns, skill-check), instead of all five sharing the Phase-0
+-- numbers. INDEPENDENT of the storefront gate. While false, opServe/opBuyStock use
+-- the GLOBAL Config values below EXACTLY as today — the LIVE Phase-0 economy is
+-- byte-for-byte unchanged. Flip true (+ redeploy) only after a per-type feel-test.
+-- Every serve stays bounded the same four ways (cost basis + clocked-in worker +
+-- per-worker cooldown + atomic per-business daily cap); this only changes the
+-- NUMBERS per type, never the invariants — no new faucet, no new exploit surface.
+Config.PerTypeMechanics = false
+
+-- MANAGER DELEGATE GATE — lets an owner promote an employee to MANAGER (role 2),
+-- who can run the day-to-day (hire, fire employees, run payroll, buy supply, serve)
+-- but CANNOT extract or redefine the business: withdraw, set wages, rename,
+-- storefront, and promote/demote stay OWNER-only. Keeping setWage owner-only is
+-- deliberate — it closes the only account-drain path a delegate could otherwise
+-- abuse (inflate a wage + run payroll). INDEPENDENT gate; while false, promote/
+-- demote refuse and every management op falls back to OWNER-only — byte-for-byte
+-- the current behaviour (no manager has ever been assigned). Flip true (+ redeploy)
+-- after a delegate feel-test.
+Config.ManagerRole = false
+
+-- Max managers an owner can appoint (excludes the owner). Bounds delegation.
+Config.MaxManagers = 3
+
+-- OWNERSHIP LIFECYCLE GATE — lets an owner TRANSFER the business to a roster member
+-- (they become owner, the old owner drops to employee) or CLOSE it (remaining
+-- account balance is refunded to the owner's bank, then the business + roster are
+-- deleted). Fills the documented gap where an owner was stuck forever (opResign
+-- refuses an owner). INDEPENDENT gate; while false the two ops refuse and the menu
+-- items are hidden — no change to the live Phase-0 system. Flip true (+ redeploy)
+-- after a transfer/close feel-test. Neither op can mint or overdraw: transfer moves
+-- no money; close refunds the OWNER their own account via the crash-safe pending
+-- idiom (drain-to-zero captured atomically) before deleting.
+Config.OwnershipLifecycle = false
+
+-- ROBBERY GATE — a non-member can crack a business's register at its storefront for
+-- a CAPPED cut of the account, paid to their bank. Pure redistribution (atomic
+-- guarded debit of the business account, never minted, never overdrawn), bounded by
+-- a small percentage + a hard cap + a long per-business cooldown + a per-robber
+-- cooldown, and it fires a police alert. Gives a placed storefront real stakes and
+-- rewards owners who withdraw profits instead of hoarding. INDEPENDENT gate; while
+-- false /robstore refuses and nothing changes. Requires a placed storefront (Phase 1a).
+Config.Robbery = false
+Config.Rob = {
+    Command = 'robstore',   -- namespaced to avoid the ATM-robbery /rob (palm6_robbery)
+    Pct = 0.25,             -- fraction of the account taken (before the hard cap)
+    Max = 5000,             -- hard cap per robbery ($)
+    Min = 2000,             -- account must hold at least this to be worth robbing
+    Radius = 3.5,           -- must be right at the storefront
+    CooldownSec = 2700,     -- 45 min per business (the register is emptied/locked)
+    RobberCooldownSec = 600,-- 10 min per robber (anti-farm), set before any DB yield
+    AlertChance = 1.0,      -- chance a robbery trips a police alert
+    Payout = 'bank',        -- where the take lands (bank = clean; seam for a dirty variant)
+    Skill = { difficulty = { 'medium', 'medium', 'hard' }, keys = { 'w', 'a', 's', 'd' } },
+}
 
 -- Command that opens the business menu (+ a short alias).
 Config.Command = 'business'
@@ -49,13 +116,44 @@ Config.Blocklist = {
 -- Business catalog. `label` shows in the register picker + roster. `flavor` is
 -- cosmetic copy. All types share the same mechanics in Phase 0 (the difference
 -- is roleplay identity + future storefront/venue hooks in Phase 1). Extensible.
+-- `blip` = the DEFAULT map-blip sprite for a new storefront of this type (Phase 1;
+-- the owner can re-pick from Config.Storefront.Sprites). All sprite ids are
+-- validated against the allowlist on write, so an unknown value here is inert.
+--
+-- `service` = the per-type ECONOMIC PROFILE + themed serve interaction, applied
+-- only when Config.PerTypeMechanics is true (else the global Config.* values below
+-- are used for every type — the live Phase-0 numbers). Each profile keeps the same
+-- faucet shape, just different values: fast/cheap/high-volume (restaurant, retail)
+-- vs slow/expensive/big-ticket (garage, dealership). `skill` is the ox_lib
+-- skillCheck spec for that type's serve (difficulty list + input keys). Labels
+-- theme the UI + notifications + ledger memo. dailyCap here overrides the per-type
+-- NPC income ceiling; maxSupply the per-type storage cap.
 Config.Types = {
-    { key = 'restaurant', label = 'Restaurant',   flavor = 'Serve the city. Keep the lights on.' },
-    { key = 'bar',        label = 'Bar / Venue',  flavor = 'Own the room. Turn a night into an institution.' },
-    { key = 'garage',     label = 'Garage / Shop',flavor = 'A service people come back to.' },
-    { key = 'retail',     label = 'Retail Front', flavor = 'A legit storefront on the map.' },
-    { key = 'dealership',  label = 'Dealership',   flavor = 'Move product. Build a name.' },
+    { key = 'restaurant', label = 'Restaurant',   flavor = 'Serve the city. Keep the lights on.',            blip = 93,
+      service = { payout = 280,  stockCost = 110, cooldown = 30,  dailyCap = 16000, maxSupply = 600,
+                  verb = 'Serve a plate',  serveNoun = 'diner',    supplyNoun = 'ingredients',
+                  skill = { difficulty = { 'easy', 'easy' },            keys = { 'w', 'a', 's', 'd' } } } },
+    { key = 'bar',        label = 'Bar / Venue',  flavor = 'Own the room. Turn a night into an institution.', blip = 93,
+      service = { payout = 320,  stockCost = 120, cooldown = 35,  dailyCap = 16000, maxSupply = 500,
+                  verb = 'Pour a round',   serveNoun = 'patron',   supplyNoun = 'bar stock',
+                  skill = { difficulty = { 'easy', 'medium' },          keys = { 'w', 'a', 's', 'd' } } } },
+    { key = 'garage',     label = 'Garage / Shop',flavor = 'A service people come back to.',                  blip = 402,
+      service = { payout = 650,  stockCost = 260, cooldown = 70,  dailyCap = 15000, maxSupply = 200,
+                  verb = 'Complete a job', serveNoun = 'customer',  supplyNoun = 'parts',
+                  skill = { difficulty = { 'medium', 'medium', 'hard' }, keys = { 'w', 'a', 's', 'd' } } } },
+    { key = 'retail',     label = 'Retail Front', flavor = 'A legit storefront on the map.',                  blip = 52,
+      service = { payout = 240,  stockCost = 95,  cooldown = 28,  dailyCap = 15000, maxSupply = 700,
+                  verb = 'Ring up a sale', serveNoun = 'shopper',   supplyNoun = 'inventory',
+                  skill = { difficulty = { 'easy', 'easy' },            keys = { 'w', 'a', 's', 'd' } } } },
+    { key = 'dealership',  label = 'Dealership',   flavor = 'Move product. Build a name.',                     blip = 326,
+      service = { payout = 1200, stockCost = 520, cooldown = 120, dailyCap = 18000, maxSupply = 80,
+                  verb = 'Close a sale',   serveNoun = 'buyer',     supplyNoun = 'units',
+                  skill = { difficulty = { 'medium', 'hard' },          keys = { 'w', 'a', 's', 'd' } } } },
 }
+
+-- Default serve labels used when Config.PerTypeMechanics is off (matches the
+-- Phase-0 wording so the gate-off UI is unchanged).
+Config.DefaultServeLabels = { verb = 'Serve a walk-in', serveNoun = 'customer', supplyNoun = 'supply' }
 
 -- ---------------------------------------------------------------------------
 -- Roster / roles. Higher number = more authority. OWN ranks (palm6_business_
@@ -115,3 +213,50 @@ Config.DailyNpcIncome = 15000
 -- Require a supply cost basis for NPC income (keep true — this is the faucet's
 -- primary limiter). If ever false, NPC income becomes free-mint: DON'T.
 Config.NpcRequiresSupply = true
+
+-- ---------------------------------------------------------------------------
+-- PHASE 1 — Storefronts. A business becomes a PLACE: the owner marks a location
+-- (server captures their real ped coords/heading — never client-supplied), a
+-- public map blip + a walk-up interaction point spawn there, day-to-day
+-- management is proximity-gated to the storefront, and NPC serving happens AT the
+-- shop. All of this is inert unless Config.Phase1Enabled (+ Config.Enabled).
+--
+-- LOCKOUT SAFETY: registering a business and setting/moving/removing a storefront
+-- are ALWAYS reachable from /business regardless of where the owner stands — only
+-- the recurring management actions require being at the storefront. An owner can
+-- never strand themselves by placing a storefront somewhere awkward.
+-- ---------------------------------------------------------------------------
+Config.Storefront = {
+    -- How close (metres, 3D) a staff member must be to their storefront to manage
+    -- it and to serve walk-ins. Generous so the whole shop interior counts.
+    Radius = 30.0,
+
+    -- Blip appearance defaults + scale. Per-type default sprite lives on
+    -- Config.Types[].blip; DefaultColor applies until the owner customises.
+    DefaultColor = 5,   -- yellow
+    Scale = 0.85,
+
+    -- Owner-selectable blip cosmetics. The server validates every write against
+    -- these two allowlists (a client can't set an arbitrary sprite/colour). Keep
+    -- to well-known-valid ids; an id that renders generically is harmless.
+    Sprites = {
+        { sprite = 52,  label = 'Storefront' },
+        { sprite = 93,  label = 'Restaurant' },
+        { sprite = 431, label = 'Bar' },
+        { sprite = 402, label = 'Garage' },
+        { sprite = 326, label = 'Dealership' },
+        { sprite = 496, label = 'Boutique' },
+        { sprite = 568, label = 'Cafe' },
+        { sprite = 500, label = 'Star' },
+    },
+    Colors = {
+        { color = 5,  label = 'Yellow' },
+        { color = 2,  label = 'Green' },
+        { color = 3,  label = 'Blue' },
+        { color = 1,  label = 'Red' },
+        { color = 27, label = 'Cyan' },
+        { color = 83, label = 'Purple' },
+        { color = 48, label = 'Grey' },
+        { color = 47, label = 'Orange' },
+    },
+}

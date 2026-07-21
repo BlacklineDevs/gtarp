@@ -263,12 +263,11 @@ Config.Events = {
     -- server-re-validated + atomic + charge-before-credit); `register` charges
     -- the founder's bank; the rest are membership/menu. `serve` is the most
     -- frequent (repeated walk-in serving) so it gets the widest budget; its money
-    -- is bounded server-side by supply/cooldown/daily-cap regardless. `openMenu`
-    -- fans a DB-backed roster snapshot per call -> blunt budget as defense-in-depth
-    -- (same reasoning as ox_inventory:openInventory / palm6_gangs:requestMenu).
+    -- is bounded server-side by supply/cooldown/daily-cap regardless. (The menu
+    -- opens server-side via the /business command, not a net event, so there is
+    -- no openMenu budget.)
     -- ensure order in custom.cfg puts palm6_eventguard BEFORE palm6_business so
     -- these guards register first in the handler chain.
-    ['palm6_business:openMenu']     = { calls = 20, window_seconds = 30 },
     ['palm6_business:register']     = { calls = 5,  window_seconds = 60 },
     ['palm6_business:deposit']      = { calls = 20, window_seconds = 60 },
     ['palm6_business:withdraw']     = { calls = 20, window_seconds = 60 },
@@ -279,10 +278,25 @@ Config.Events = {
     ['palm6_business:acceptHire']   = { calls = 10, window_seconds = 60 },
     ['palm6_business:fire']         = { calls = 15, window_seconds = 60 },
     ['palm6_business:setWage']      = { calls = 20, window_seconds = 60 },
+    ['palm6_business:promote']      = { calls = 10, window_seconds = 60 },
+    ['palm6_business:demote']       = { calls = 10, window_seconds = 60 },
+    ['palm6_business:transfer']     = { calls = 5,  window_seconds = 60 },
+    ['palm6_business:close']        = { calls = 5,  window_seconds = 60 },
     ['palm6_business:runPayroll']   = { calls = 10, window_seconds = 60 },
     ['palm6_business:chargeNearest']= { calls = 20, window_seconds = 60 },
     ['palm6_business:acceptCharge'] = { calls = 15, window_seconds = 60 },
     ['palm6_business:viewLedger']   = { calls = 20, window_seconds = 60 },
     ['palm6_business:rename']       = { calls = 5,  window_seconds = 60 },
     ['palm6_business:resign']       = { calls = 5,  window_seconds = 60 },
+    -- Phase 1 storefronts. All owner-gated + re-validated server-side; none move
+    -- money. `openHere` is the walk-up (staff open the menu, passersby get a card);
+    -- `requestStorefronts` is a client-load pull, so both get a wider budget.
+    ['palm6_business:setStorefront']      = { calls = 10, window_seconds = 60 },
+    ['palm6_business:clearStorefront']    = { calls = 10, window_seconds = 60 },
+    ['palm6_business:setBlip']            = { calls = 15, window_seconds = 60 },
+    ['palm6_business:openHere']           = { calls = 40, window_seconds = 60 },
+    ['palm6_business:requestStorefronts'] = { calls = 10, window_seconds = 60 },
+    -- Robbery: server re-validates proximity + per-robber + per-business cooldown +
+    -- balance + atomic guarded debit; a tight budget is belt-and-braces over those.
+    ['palm6_business:rob']                = { calls = 6,  window_seconds = 60 },
 }

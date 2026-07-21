@@ -390,3 +390,14 @@ function Game.ForceExitInterior()
     clearInteriorProps()
     DoScreenFadeIn(0)
 end
+
+-- Is the local player currently standing inside a GTA interior? Used by the admin
+-- /bizshell capture to REFUSE capturing an open-street coord (which would teleport
+-- every business of that type into the road). GetInteriorAtCoords is client-only,
+-- which is why capture is client-initiated even though the server re-reads coords.
+function Game.IsInsideInterior()
+    local ped = PlayerPedId()
+    if ped == 0 then return false end
+    local c = GetEntityCoords(ped)
+    return GetInteriorAtCoords(c.x, c.y, c.z) ~= 0
+end

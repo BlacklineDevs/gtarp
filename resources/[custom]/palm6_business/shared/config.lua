@@ -323,8 +323,11 @@ Config.Interior = {
     -- `exitDist` = how far from the entry anchor the exit prompt appears.
     Shells = {},
 
-    -- Admin capture command (staff-gated server-side; see server/main.lua).
-    -- Usage: stand inside the interior, /bizshell <key> <label...>
+    -- Admin capture command. Client-side /bizshell verifies you are standing
+    -- INSIDE an interior (GetInteriorAtCoords) then forwards to the server, which
+    -- re-checks the `command.bizshell` ace and reads your coords authoritatively.
+    -- Usage: stand inside the interior, /bizshell <key> <label...>. List what is
+    -- captured (and which type mappings are still missing a shell) with /bizshells.
     CaptureCommand = 'bizshell',
 
     -- Which shell each business type prefers, by shell key. A type with no

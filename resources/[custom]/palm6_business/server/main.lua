@@ -1307,10 +1307,11 @@ for _, l in ipairs((Config.Interior and Config.Interior.Layouts) or {}) do
     if l.key then ALLOWED_LAYOUT[l.key] = true end
 end
 
--- Live interior sessions: src -> { businessId, retX, retY, retZ }. The return
--- coords are captured from the player's REAL server-side position at entry, so
--- exit puts them back where they walked in rather than at a guessed doorstep.
-local inside = {}
+-- NOTE: `inside` (live interior sessions: src -> { businessId, retX, retY, retZ })
+-- and `entering` are declared ONCE at the top of this file (hoisted), because the
+-- proximity gate + setStorefront guard above reference them. Do NOT redeclare them
+-- here with `local` — a second `local inside` would shadow the hoisted table, so
+-- opEnterInterior would write one table while atShop read the other.
 
 -- Put a player back in the world bucket. Safe to call unconditionally.
 local function toWorldBucket(src)
@@ -1497,13 +1498,46 @@ RegisterNetEvent('palm6_business:rob',             function(businessId) opRob(so
 RegisterNetEvent('palm6_business:enterInterior', function(businessId) opEnterInterior(source, businessId) end)
 RegisterNetEvent('palm6_business:exitInterior',  function(died) opExitInterior(source, died == true) end)
 RegisterNetEvent('palm6_business:setLayout',     function(layoutKey) opSetLayout(source, layoutKey) end)
+-- Shell capture is CLIENT-initiated (client/main.lua /bizshell) so it can verify
+-- the admin is actually standing inside an interior (GetInteriorAtCoords, a
+-- client native) BEFORE capturing — a coord captured in the open street would
+-- teleport every business of that type into the road. The server still re-checks
+-- the admin ace and reads the coords authoritatively; the client only decides
+-- "am I inside an interior" and forwards the key/label.
+RegisterNetEvent('palm6_business:captureShell', function(key, label) opCaptureShell(source, key, label) end)
 
--- Admin shell-capture command. Raw registration + in-handler ace gate (the
--- palm6_fc.debug idiom): stand inside a real interior, /bizshell <key> <label...>.
-RegisterCommand(Config.Interior.CaptureCommand or 'bizshell', function(src, args)
-    local key = args[1]
-    local label = args[2] and table.concat(args, ' ', 2) or nil
-    opCaptureShell(src, key, label)
+-- Admin: list captured shells + which type maps to each (operability — so David
+-- can see what is captured vs. what each business type expects). Ace-gated in
+-- handler (palm6_fc.debug idiom); prints full detail to the server console and a
+-- one-line summary to the invoking admin.
+RegisterCommand('bizshells', function(src, _args)
+    if src ~= 0 and not IsPlayerAceAllowed(src, 'command.' .. (Config.Interior.CaptureCommand or 'bizshell')) then return end
+    -- Reverse the type->shell map so we can annotate each shell with the types it serves.
+    local typesFor = {}
+    for typeKey, shellKey in pairs((Config.Interior and Config.Interior.TypeShell) or {}) do
+        typesFor[shellKey] = typesFor[shellKey] or {}
+        typesFor[shellKey][#typesFor[shellKey] + 1] = typeKey
+    end
+    local n = 0
+    print('[palm6_business] ===== captured interior shells =====')
+    for key, s in pairs(shells) do
+        n = n + 1
+        local serves = typesFor[key] and table.concat(typesFor[key], ', ') or '(no type mapped)'
+        print(('[palm6_business]   %s "%s" @ %.1f, %.1f, %.1f  serves: %s'):format(key, s.label or '?', s.x, s.y, s.z, serves))
+    end
+    -- Report which mapped types still have NO shell captured (the "Enter never
+    -- appears" trap) so the gap is visible at a glance.
+    local missing = {}
+    for typeKey, shellKey in pairs((Config.Interior and Config.Interior.TypeShell) or {}) do
+        if not shells[shellKey] then missing[#missing + 1] = ('%s->%s'):format(typeKey, shellKey) end
+    end
+    if #missing > 0 then print('[palm6_business]   MISSING shells for: ' .. table.concat(missing, ', ')) end
+    print('[palm6_business] ====================================')
+    if src ~= 0 then
+        local msg = ('%d shell(s) captured.'):format(n)
+        if #missing > 0 then msg = msg .. (' Missing: %d type(s) — see console.'):format(#missing) end
+        notify(src, 'Business', msg, n > 0 and 'inform' or 'error')
+    end
 end, false)
 
 AddEventHandler('playerDropped', function()

@@ -445,6 +445,24 @@ RegisterCommand(Config.Rob and Config.Rob.Command or 'robstore', function()
     end
 end, false)
 
+-- Admin shell capture (Phase 1b). Client-side so it can verify the admin is
+-- actually standing inside an interior BEFORE capturing — a street coord would
+-- teleport every business of that type into the road. The SERVER re-checks the
+-- admin ace and reads the coords authoritatively; a non-admin who runs this just
+-- gets silently dropped server-side. Usage: /bizshell <key> <label...>
+RegisterCommand(Config.Interior and Config.Interior.CaptureCommand or 'bizshell', function(_src, args)
+    if not (Config.Enabled and Config.Phase1Enabled and Config.Interiors) then return end
+    local key = args[1]
+    if not key then
+        return Game.Notify({ title = 'Business', description = 'Usage: /bizshell <key> <label>', type = 'error' })
+    end
+    if not Game.IsInsideInterior() then
+        return Game.Notify({ title = 'Business', description = 'Stand INSIDE an interior before capturing a shell.', type = 'error' })
+    end
+    local label = args[2] and table.concat(args, ' ', 2) or nil
+    TriggerServerEvent('palm6_business:captureShell', key, label)
+end, false)
+
 AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
     Game.ClearStorefronts()

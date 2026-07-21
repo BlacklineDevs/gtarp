@@ -309,4 +309,8 @@ Config.Events = {
     -- — throttle the enter side, never the way out.
     ['palm6_business:exitInterior']       = { calls = 120, window_seconds = 60 },
     ['palm6_business:setLayout']          = { calls = 15, window_seconds = 60 },
+    -- Admin shell capture (client-initiated so it can interior-check first). The
+    -- server re-checks the admin ace, so a non-admin spamming this is rejected;
+    -- the budget is a blunt backstop on top of that.
+    ['palm6_business:captureShell']       = { calls = 20, window_seconds = 60 },
 }

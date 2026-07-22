@@ -209,6 +209,31 @@ local function clearInteriorProps()
     spawnedProps = {}
 end
 
+-- Point lights for a layout. GTA props do NOT emit light, so an outdoor/rooftop
+-- venue is pitch dark at night without these. Each is drawn every frame by ONE
+-- thread while the player is inside; clearing the list stops the thread. Positions
+-- are pre-computed to world space at spawn time.
+local interiorLights = {}   -- { {x,y,z,r,g,b,range,intensity}, ... }
+local lightsRunning = false
+
+local function clearInteriorLights()
+    interiorLights = {}
+    lightsRunning = false   -- signals the draw thread to exit
+end
+
+local function startLightsThread()
+    if lightsRunning then return end
+    lightsRunning = true
+    CreateThread(function()
+        while lightsRunning do
+            for _, l in ipairs(interiorLights) do
+                DrawLightWithRange(l.x, l.y, l.z, l.r, l.g, l.b, l.range, l.intensity)
+            end
+            Wait(0)
+        end
+    end)
+end
+
 -- Rotate a local (ox,oy) offset by the shell heading so a layout authored around
 -- +Y lands correctly whatever direction the shell faces.
 local function rotateOffset(ox, oy, headingDeg)
@@ -234,11 +259,23 @@ end
 -- load is skipped, never fatal — a missing prop must not block or empty the room.
 local function spawnLayout(layout, anchor)
     clearInteriorProps()
-    if not layout or not layout.props then return end
+    clearInteriorLights()
+    if not layout then return end
     local cap = (Config.Interior and Config.Interior.MaxPropsPerLayout) or 24
     local timeout = (Config.Interior and Config.Interior.PropLoadTimeoutMs) or 3000
+    -- Add a point light at an anchor-relative offset (ox,oy rotated by heading,
+    -- oz vertical). spec = { r,g,b,range,intensity }, all optional (warm default).
+    local function addLight(ox, oy, oz, spec)
+        spec = spec or {}
+        local rx, ry = rotateOffset(ox or 0.0, oy or 0.0, anchor.h)
+        interiorLights[#interiorLights + 1] = {
+            x = anchor.x + rx, y = anchor.y + ry, z = anchor.z + (oz or 0.0),
+            r = spec.r or 255, g = spec.g or 197, b = spec.b or 143,
+            range = spec.range or 6.0, intensity = spec.intensity or 3.0,
+        }
+    end
     local skipped = {}
-    for i, p in ipairs(layout.props) do
+    for i, p in ipairs(layout.props or {}) do
         if i > cap then break end
         local hash = loadModel(p.model, timeout)
         if hash then
@@ -254,7 +291,12 @@ local function spawnLayout(layout, anchor)
         else
             skipped[#skipped + 1] = tostring(p.model)
         end
+        -- A prop can carry its own light (e.g. a lamp) — placed just above it.
+        if p.light then addLight(p.ox, p.oy, (p.oz or 0.0) + (p.light.dz or 1.6), p.light) end
     end
+    -- Free-standing lights declared on the layout (not tied to a prop).
+    for _, l in ipairs(layout.lights or {}) do addLight(l.ox, l.oy, l.oz or 2.2, l) end
+    if #interiorLights > 0 then startLightsThread() end
     -- Surface bad prop names once per entry so the config's UNVERIFIED starter
     -- layouts can be tuned by just walking in and reading the console, instead of
     -- eyeballing a prop viewer. Skips are already non-fatal; this only names them.
@@ -383,6 +425,7 @@ function Game.ExitInterior(d)
     DoScreenFadeOut(fade); Wait(fade)
     tearDownExit()
     clearInteriorProps()
+    clearInteriorLights()
     if type(d) == 'table' and d.x then
         local ped = PlayerPedId()
         SetEntityCoordsNoOffset(ped, d.x + 0.0, d.y + 0.0, d.z + 0.0, false, false, false)
@@ -398,6 +441,7 @@ end
 function Game.ForceExitInterior()
     tearDownExit()
     clearInteriorProps()
+    clearInteriorLights()
     DoScreenFadeIn(0)
 end
 

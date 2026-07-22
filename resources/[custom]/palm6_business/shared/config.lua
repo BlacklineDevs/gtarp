@@ -392,6 +392,43 @@ Config.Interior = {
     Layouts = {
         { key = 'bare',     label = 'Bare (empty)',  props = {} },
 
+        -- RESTAURANT — ROOFTOP LOUNGE. Built to sit on a real open rooftop (David:
+        -- "it should be a rooftop lounge"), so the SETTING is the immersive part
+        -- (real skyline) and these props are the venue: a bar, dining sets, planters,
+        -- a perimeter railing, and warm point lights for night. Anchor faces +Y with
+        -- the view/railing at the far +Y edge. Tune offsets to the chosen roof.
+        { key = 'rooftop',  label = 'Rooftop lounge', props = {
+            -- dining sets (center)
+            { model = 'prop_table_03',      ox = -2.2, oy = 3.0, oz = 0.0, oh = 0.0 },
+            { model = 'prop_chair_01a',     ox = -2.2, oy = 2.3, oz = 0.0, oh = 0.0 },
+            { model = 'prop_chair_01a',     ox = -2.2, oy = 3.7, oz = 0.0, oh = 180.0 },
+            { model = 'prop_table_03',      ox = 2.2,  oy = 3.0, oz = 0.0, oh = 0.0 },
+            { model = 'prop_chair_01a',     ox = 2.2,  oy = 2.3, oz = 0.0, oh = 0.0 },
+            { model = 'prop_chair_01a',     ox = 2.2,  oy = 3.7, oz = 0.0, oh = 180.0 },
+            { model = 'prop_table_03',      ox = 0.0,  oy = 5.0, oz = 0.0, oh = 0.0 },
+            { model = 'prop_chair_01a',     ox = 0.0,  oy = 4.3, oz = 0.0, oh = 0.0 },
+            { model = 'prop_chair_01a',     ox = 0.0,  oy = 5.7, oz = 0.0, oh = 180.0 },
+            -- bar (right side)
+            { model = 'prop_ff_counter_01', ox = 3.4,  oy = 1.6, oz = 0.0, oh = 90.0 },
+            { model = 'prop_ff_counter_02', ox = 3.4,  oy = 2.8, oz = 0.0, oh = 90.0 },
+            -- lounge low table (left side)
+            { model = 'prop_table_03',      ox = -3.2, oy = 1.6, oz = 0.0, oh = 0.0 },
+            -- planters (corners)
+            { model = 'prop_pot_plant_01a', ox = -3.4, oy = 5.4, oz = 0.0, oh = 0.0 },
+            { model = 'prop_pot_plant_01a', ox = 3.4,  oy = 5.4, oz = 0.0, oh = 0.0 },
+            { model = 'prop_pot_plant_01a', ox = -3.4, oy = 0.4, oz = 0.0, oh = 0.0 },
+            { model = 'prop_pot_plant_01a', ox = 3.4,  oy = 0.4, oz = 0.0, oh = 0.0 },
+            -- perimeter railing along the view edge (uncertain model — skip-log catches)
+            { model = 'prop_ld_rail_01',    ox = -2.5, oy = 6.3, oz = 0.0, oh = 0.0 },
+            { model = 'prop_ld_rail_01',    ox = 0.0,  oy = 6.3, oz = 0.0, oh = 0.0 },
+            { model = 'prop_ld_rail_01',    ox = 2.5,  oy = 6.3, oz = 0.0, oh = 0.0 },
+        }, lights = {
+            { ox = 0.0,  oy = 3.5, oz = 2.6, r = 255, g = 188, b = 132, range = 9.0, intensity = 4.0 }, -- warm over dining
+            { ox = 3.0,  oy = 2.2, oz = 2.4, r = 255, g = 180, b = 120, range = 7.0, intensity = 3.5 }, -- bar
+            { ox = 0.0,  oy = 5.6, oz = 2.4, r = 255, g = 188, b = 132, range = 8.0, intensity = 3.5 }, -- view edge
+            { ox = -3.0, oy = 1.6, oz = 2.4, r = 120, g = 160, b = 255, range = 6.0, intensity = 3.0 }, -- cool accent, lounge
+        } },
+
         -- RESTAURANT — casual diner. Three 2-seat tables, a service counter, and
         -- greenery. Built from plain tables + separate chairs (higher-confidence
         -- names) rather than combo props.
@@ -468,7 +505,7 @@ Config.Interior = {
     -- restaurant looks like a restaurant on first entry without the owner touching
     -- anything. Falls through to DefaultLayout for an unlisted type.
     TypeDefaultLayout = {
-        restaurant = 'diner',
+        restaurant = 'rooftop',
         bar        = 'lounge',
         retail     = 'stocked',
         garage     = 'workshop',

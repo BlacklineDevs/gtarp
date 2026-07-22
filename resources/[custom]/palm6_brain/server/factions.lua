@@ -163,15 +163,45 @@ exports('HasGrudgeAgainst', function(id)
     return false
 end)
 
+-- ── PERSISTENCE (resource KVP; survives restarts + redeploys) ────────────────
+-- Grudges carry a real-epoch `at`, so decay continues correctly across a restart.
+-- Defensive: a corrupt/oversized blob is ignored, never throws.
+local KVP_KEY  = 'palm6_brain:grudges:v1'
+local SAVE_MS  = 120000
+local BLOB_MAX = 262144
+
+local function saveGrudges()
+    local ok, blob = pcall(json.encode, grudges)
+    if ok and type(blob) == 'string' and #blob <= BLOB_MAX then
+        pcall(SetResourceKvp, KVP_KEY, blob)
+    end
+end
+
+local function loadGrudges()
+    local blob = GetResourceKvpString(KVP_KEY)
+    if type(blob) ~= 'string' or blob == '' then return end
+    local ok, data = pcall(json.decode, blob)
+    if ok and type(data) == 'table' then
+        grudges = data
+        pruneExpired(os.time())   -- drop anything that decayed while we were down
+        enforceCap()
+    end
+end
+
 -- ── WIRE-UP (dark-by-default) ───────────────────────────────────────────────
 -- Only attach to the Director seam when this module is ENABLED and the seam
 -- actually exists. With CFG.Enabled=false NOTHING is registered — no observer, no
--- context — so the module is provably inert in prod (the export still exists but
--- always returns false because the store is never written).
+-- context, no persistence — so the module is provably inert in prod (the export
+-- still exists but always returns false because the store is never written).
 if CFG.Enabled and Config and Director then
+    loadGrudges()
     if Director.OnAction then Director.OnAction(onAction) end
     if Director.RegisterContext then Director.RegisterContext(provideContext) end
+    CreateThread(function() while true do Wait(SAVE_MS); saveGrudges() end end)
+    AddEventHandler('onResourceStop', function(res)
+        if res == GetCurrentResourceName() then saveGrudges() end
+    end)
     print('[palm6_brain:factions] armed — grudges decay after '
         .. CFG.GrudgeTtlSec .. 's, cap ' .. CFG.MaxGrudges
-        .. ' (retaliation is EMERGENT via Director context, never forced).')
+        .. ' (KVP-persisted; retaliation EMERGENT via Director context).')
 end

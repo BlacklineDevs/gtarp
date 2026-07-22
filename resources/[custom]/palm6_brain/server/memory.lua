@@ -81,6 +81,37 @@ local bySubject = {}
 local recent    = {}
 local lastMove  = {}
 
+-- ── PERSISTENCE (resource KVP; survives resource restart, server restart, AND a
+-- code redeploy — KVP lives in the server data store, not the resource files). So
+-- the world's memory is no longer wiped every time we redeploy during a feel-test.
+-- Fully defensive: a corrupt/oversized blob is ignored, never throws.
+local KVP_KEY  = 'palm6_brain:memory:v1'
+local SAVE_MS  = 120000   -- flush every 2 min (+ on resource stop)
+local BLOB_MAX = 512000   -- refuse to persist an implausibly large blob (KVP guard)
+
+local function saveMemory()
+    local ok, blob = pcall(json.encode, { recent = recent, bySubject = bySubject })
+    if ok and type(blob) == 'string' and #blob <= BLOB_MAX then
+        pcall(SetResourceKvp, KVP_KEY, blob)
+    end
+end
+
+local function loadMemory()
+    local blob = GetResourceKvpString(KVP_KEY)
+    if type(blob) ~= 'string' or blob == '' then return end
+    local ok, data = pcall(json.decode, blob)
+    if not ok or type(data) ~= 'table' then return end
+    -- Reassign the upvalues (every closure that references recent/bySubject sees
+    -- the new tables — Lua closures capture the variable, not the value).
+    if type(data.recent) == 'table' then recent = data.recent end
+    if type(data.bySubject) == 'table' then bySubject = data.bySubject end
+    -- Re-bound after load in case the caps were lowered since the save.
+    while #recent > RECENT_MAX do table.remove(recent, 1) end
+    for _, ring in pairs(bySubject) do
+        while type(ring) == 'table' and #ring > RING_MAX do table.remove(ring, 1) end
+    end
+end
+
 -- Push onto a subject's ring, trimming from the front so it can NEVER grow past
 -- RING_MAX. Creates the ring lazily. (table.remove(t, 1) keeps insertion order.)
 local function pushRing(id, entry)
@@ -219,13 +250,21 @@ RegisterCommand('brainmemory', function(src)
     end
 end, true)
 
--- ── PERSISTENCE HOOK (FUTURE) ────────────────────────────────────────────────
--- v1 is in-memory only: on restart the world forgets. When persistence lands,
--- serialise `recent` (and optionally `bySubject`) here on stop and rehydrate on
--- start. Kept as a documented seam so the store shape above is the contract.
---   AddEventHandler('onResourceStop', function(res)
---       if res ~= GetCurrentResourceName() then return end
---       -- SaveJson('memory.json', { recent = recent })   -- future
---   end)
+-- ── PERSISTENCE WIRE-UP ──────────────────────────────────────────────────────
+-- Rehydrate on boot, flush on a slow timer, and flush once more on stop so the
+-- world keeps its memory across restarts + redeploys.
+loadMemory()
 
-print('[palm6_brain:memory] Phase 3 NPC memory attached (observe + teach; in-memory).')
+CreateThread(function()
+    while true do
+        Wait(SAVE_MS)
+        saveMemory()
+    end
+end)
+
+AddEventHandler('onResourceStop', function(res)
+    if res ~= GetCurrentResourceName() then return end
+    saveMemory()
+end)
+
+print('[palm6_brain:memory] Phase 3 NPC memory attached (observe + teach; KVP-persisted).')

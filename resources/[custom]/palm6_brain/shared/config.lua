@@ -137,3 +137,167 @@ Config.NamedNpcs = {
 Config.BubbleSeconds = 7.0
 -- How close (m) you must be to keep the conversation open.
 Config.TalkRange = 3.0
+
+-- ---------------------------------------------------------------------------
+-- PHASE 2b — MOVERS: the "acting population" the Director steers.
+--
+-- Movers are ANONYMOUS extras (no dialogue, no identity card) that the Director
+-- can send between known places — the visible motion that makes the world feel
+-- alive off-peak. They are distinct from NamedNpcs on purpose:
+--   • NamedNpcs (Tony/Rosa/Deak) = STATIONARY conversational anchors. The
+--     Director may reference them as a talkTo target but NEVER tasks them to
+--     move (the validator marks them "targetable" but not "directable").
+--   • Movers = DIRECTABLE. The Director assigns each one goal per tick.
+--
+-- `home` MUST be a Config.Scenes label (the Director only knows those places).
+-- `model` is used by the client executor when it materialises the mover.
+--
+-- ⚠️ INERT until the client executor slice lands AND Config.Director.Enabled is
+-- flipped: nothing reads this list except the Director roster, which only runs
+-- when the Director gate is on. Ships as illustrative examples, dark.
+-- ---------------------------------------------------------------------------
+Config.Movers = {
+    { id = 'mover_legion_1', model = 'a_m_y_business_01', home = 'Legion Square' },
+    { id = 'mover_legion_2', model = 'a_f_y_hipster_02',  home = 'Legion Square' },
+    { id = 'mover_pier_1',   model = 'a_m_y_tourist_01',  home = 'Del Perro Pier' },
+    { id = 'mover_beach_1',  model = 'a_f_y_tourist_01',  home = 'Vespucci Beach' },
+}
+
+-- ===========================================================================
+-- PHASE 2b — THE AI DIRECTOR (docs/AI-NPC-ROADMAP.md §Phase 2).
+--
+-- The Director is a low-frequency, BATCHED, server-side LLM call: once per tick
+-- it looks at the whole NPC roster + world state and assigns each NPC ONE goal
+-- from a CLOSED action enum. The model only ever picks a verb + typed args; the
+-- Lua engine chooses whether/how to act. This is the "on-rails AI" the roadmap
+-- describes: the LLM literally cannot name an action or target we didn't define,
+-- because every returned action passes three validation layers
+-- (shape → referential → legality) before anything happens.
+--
+-- 🔒 SAFETY MODEL — why this ships DARK and in DRY-RUN:
+--   • Config.Director.Enabled = false  → the tick never runs (prod-inert).
+--   • Config.Director.DryRun  = true   → even when the tick runs, accepted
+--       actions are only LOGGED ("Tony WOULD goTo the plaza"), never executed.
+--   • Config.Director.MoneyEnabled / CrimeEnabled = false → the money and crime
+--       verbs still VALIDATE, but the legality layer BLOCKS them, so they can
+--       never fire even if DryRun were off. These are the two capability gates
+--       that guard the live economy and the police-dispatch bus. They are the
+--       flips that require David's browser-walk (money) / rate-limit review
+--       (crime) FIRST — see the roadmap's "Risks & hard parts".
+--
+-- Nothing in this block spawns a ped, moves money, or calls dispatch. It is the
+-- planning spine only. Actuation (networked peds, palm6_business income,
+-- Bridge.AlertPolice) lands in later, individually-gated slices.
+-- ===========================================================================
+Config.Director = {
+    -- MASTER GATE for the whole Director tier. false = the tick loop never
+    -- starts. Independent of Config.Enabled so the ambient/dialogue tiers and
+    -- the Director can be lit up separately.
+    Enabled = false,
+
+    -- DRY-RUN. true = accepted actions are only LOGGED and discarded (the tick
+    -- proves the LLM→validate pipeline with zero state change). false = accepted
+    -- actions are COMMITTED to the server-side goal store with a TTL and
+    -- broadcast to clients on `palm6_brain:goal` (npcId, goal|false) — the seam
+    -- the ped-actuation slice subscribes to. NOTE: even with DryRun=false there
+    -- is still NO ped movement, money, or dispatch until the client executor and
+    -- the Money/Crime gates land; a committed goal with no consumer is inert.
+    -- Stays true until the client executor exists AND is browser-walked.
+    DryRun = true,
+
+    -- Goal Time-To-Live = TickSeconds * this. A committed goal auto-expires after
+    -- this many ticks with no refresh, so a Director outage (GLM down) can never
+    -- freeze an NPC on a stale goal — it expires and the NPC falls back to the
+    -- always-on Lua reflex tier (the roadmap's graceful-degradation guarantee).
+    GoalTtlTicks = 2,
+
+    -- CAPABILITY GATES. Even with DryRun off, a verb whose gate is false is
+    -- BLOCKED by the legality layer. These are the two live-system guards:
+    --   MoneyEnabled → verbs that would move real money (orderAt, buyFrom).
+    --       ⚠️ palm6_business enforces exactly ONE bounded NPC-income faucet
+    --       (owner-present, supply-gated, daily-capped). Auto-crediting an
+    --       ABSENT owner would be a NEW faucet = AFK money-printer. Do NOT flip
+    --       this until the economy model for off-peak income is decided and the
+    --       money path is browser-walked (roadmap "Economy safety").
+    --   CrimeEnabled → verbs that would call the police-dispatch bus
+    --       (rob, attack, deal). Gate off until rate-limits + CountOnDutyPolice
+    --       gating are wired so off-peak crime can't spam on-duty officers.
+    MoneyEnabled = false,
+    CrimeEnabled = false,
+
+    -- Seconds between Director ticks. Roadmap costs are computed at 30–60s; a
+    -- slow tick is what keeps this ~free (one batched call, not per-ped).
+    TickSeconds = 60,
+
+    -- Only run a tick if at least this many real players are ON. Off-peak is the
+    -- whole point, but with ZERO players there is nobody to perceive the world,
+    -- so we save the call. 0 = always tick when Enabled.
+    MinPlayers = 1,
+
+    -- Max NPCs described to the model in one batched call. The batching trick
+    -- (one call for ~20 NPCs) is where the 12× cost win comes from; a hard cap
+    -- keeps the prompt bounded. Roster beyond this is simply not directed.
+    MaxRoster = 20,
+
+    -- Hard ceiling on any `amount` arg the model can request, BEFORE the
+    -- per-verb clamp. A defensive backstop so a hallucinated 9-figure number is
+    -- rejected at the shape layer, never reaching the clamp. Real economy caps
+    -- live in palm6_business; this is just an outer sanity bound.
+    MaxAmount = 100000,
+
+    -- Log every accepted/blocked action to the server console each tick. This is
+    -- the observability meter (David's "ship the meter before shipped" rule) —
+    -- it is how we watch the Director's decisions before trusting it to actuate.
+    Verbose = true,
+
+    -- CRIME DISPATCH THROTTLE. When CrimeEnabled flips on (a later slice), a
+    -- committed crime goal (rob/deal/attack) will fire a police dispatch through
+    -- palm6's alert bus (Bridge.AlertPolice) — but ONLY if this throttle allows,
+    -- so off-peak AI crime can never flood on-duty officers. The throttle is the
+    -- guardrail the roadmap mandates ("rate-limit + CountOnDutyPolice"); it is
+    -- built and battery-tested (/braincrime) BEFORE any live dispatch is wired.
+    -- All limits are advisory numbers, not invariants — tune freely.
+    Crime = {
+        -- Never dispatch to an empty PD: require at least this many on-duty police.
+        -- (An AI crime nobody can respond to is just noise.)
+        MinOnDutyPolice = 1,
+        -- Server-wide floor between ANY two crime dispatches (seconds).
+        GlobalCooldownSec = 45,
+        -- Per-location floor (seconds) — one scene can't spawn back-to-back crimes,
+        -- mirroring palm6_robbery's per-ATM cooldown idiom.
+        LocationCooldownSec = 180,
+        -- Hard cap on crime dispatches accepted in a single Director tick.
+        PerTickMax = 1,
+
+        -- Dispatch presentation on the officer's map (blip + 911 notify). Sprite/
+        -- colour/scale match palm6_robbery's dispatch look; duration is how long
+        -- the blip lives. Per-verb `labels` set the 911 text; `defaultLabel` is
+        -- the fallback for any crime verb without its own entry.
+        Dispatch = {
+            sprite = 161, colour = 1, scale = 1.2, durationSec = 90,
+            defaultLabel = 'Suspicious activity reported',
+            labels = {
+                rob    = 'Robbery in progress',
+                attack = 'Assault reported',
+                deal   = 'Suspected narcotics activity',
+            },
+        },
+    },
+
+    -- PASSIVE INCOME WIRING. When MoneyEnabled flips on, a committed orderAt goal
+    -- (a mover "shopping" at a scene) credits a player-owned business whose
+    -- storefront sits within BusinessRadius of that scene, via
+    -- exports.palm6_business:AccrueNpcPassive. The MONEY is already hard-bounded by
+    -- palm6_business (shared daily cap + supply cost basis), so this side only
+    -- needs a per-business cooldown to make income a believable TRICKLE rather than
+    -- an instant cap-out. Requires BOTH gates: Config.Director.MoneyEnabled AND
+    -- palm6_business Config.NpcPassiveIncome. Inert until both are on.
+    Money = {
+        -- Metres around a scene anchor to look for an owned storefront to credit.
+        BusinessRadius = 40.0,
+        -- Minimum seconds between passive credits to the SAME business — shapes the
+        -- trickle. The real ceiling is palm6_business's DailyNpcIncome; this just
+        -- spaces credits out so a shop doesn't cap out in minutes.
+        PerBusinessCooldownSec = 300,
+    },
+}

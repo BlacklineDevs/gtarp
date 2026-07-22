@@ -633,6 +633,76 @@ CREATE TABLE IF NOT EXISTS `palm6_business_shells` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
     { name = '0073 business interior_layout', sql = [[
 ALTER TABLE `palm6_businesses` ADD COLUMN IF NOT EXISTS `interior_layout` VARCHAR(32) NULL]] },
+    -- 0074: PALM6 Threads (player custom clothing) Phase 1. Web (palm6-web) owns all
+    -- WRITES to garments/slots/designs/slots_alloc/jobs; the palm6_threads game resource
+    -- READS designs by citizenid only. All IF NOT EXISTS -> safe to re-run every boot,
+    -- first-boot-safe (no back-grant). Shared across ~60 worktrees: this migration only
+    -- makes the tables appear once. See docs/superpowers/plans 2026-07-22 phase1.
+    { name = '0074 palm6_clothing_garments', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_clothing_garments` (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    label VARCHAR(64) NOT NULL,
+    category VARCHAR(24) NOT NULL,
+    gender VARCHAR(8) NOT NULL,
+    component_id TINYINT UNSIGNED NOT NULL,
+    base_ydd_ref VARCHAR(128) NULL,
+    uv_template_ref VARCHAR(128) NULL,
+    uv_resolution SMALLINT UNSIGNED NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_clothing_garment_label (label)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
+    { name = '0074 palm6_clothing_slots', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_clothing_slots` (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    citizenid VARCHAR(64) NOT NULL,
+    source ENUM('tebex','perk','admin') NOT NULL,
+    source_ref VARCHAR(128) NULL,
+    granted_at BIGINT UNSIGNED NOT NULL,
+    consumed_by_design_id INT UNSIGNED NULL,
+    revoked TINYINT(1) NOT NULL DEFAULT 0,
+    INDEX idx_clothing_slots_cid (citizenid),
+    UNIQUE KEY uniq_clothing_slot_source (source, source_ref, citizenid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
+    { name = '0074 palm6_clothing_designs', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_clothing_designs` (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    citizenid VARCHAR(64) NOT NULL,
+    garment_id INT UNSIGNED NOT NULL,
+    source_mode ENUM('curated','upload','ai') NOT NULL DEFAULT 'curated',
+    texture_ref VARCHAR(256) NULL,
+    spec_json JSON NULL,
+    status ENUM('draft','submitted','mod_pending','approved','rejected','generating','deployed','failed') NOT NULL DEFAULT 'draft',
+    moderation_json JSON NULL,
+    staff_reviewer VARCHAR(64) NULL,
+    reject_reason VARCHAR(255) NULL,
+    drawable_index INT NULL,
+    texture_index INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_clothing_designs_cid_status (citizenid, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
+    { name = '0074 palm6_clothing_slots_alloc', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_clothing_slots_alloc` (
+    component_id TINYINT UNSIGNED NOT NULL,
+    drawable_index INT NOT NULL,
+    design_id INT UNSIGNED NOT NULL,
+    allocated_at BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (component_id, drawable_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
+    { name = '0074 palm6_clothing_jobs', sql = [[
+CREATE TABLE IF NOT EXISTS `palm6_clothing_jobs` (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    design_id INT UNSIGNED NOT NULL,
+    status ENUM('queued','running','done','failed') NOT NULL DEFAULT 'queued',
+    attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    worker_run_id VARCHAR(64) NULL,
+    error VARCHAR(512) NULL,
+    artifact_ref VARCHAR(256) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_clothing_jobs_design (design_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]] },
 }
 
 CreateThread(function()

@@ -1,0 +1,121 @@
+name: Palm6 GLM brain convars
+
+# One-off ops workflow: writes the palm6:glm_* convars into the live server's
+# server.cfg via the Pterodactyl client API, then restarts FXServer so palm6_brain
+# (Phase 1 named-NPC dialogue) can reach GLM. Idempotent (re-running re-sets the
+# same lines). Manual dispatch only. Mirrors palm6-discord-convars.yml exactly.
+#
+# Convars set:
+#   palm6:glm_key    - from secret PALM6_GLM_KEY (z.ai GLM key, never in git)
+#   palm6:glm_url    - z.ai OpenAI-compatible chat completions endpoint (literal)
+#   palm6:glm_model  - glm-4.5-flash (free tier, literal)
+#
+# Secrets used (write-only, never in git):
+#   PTERO_API_KEY   - Pterodactyl client key (drives file write + restart)
+#   PALM6_GLM_KEY   - z.ai API key for the NPC brain
+#
+# Inert unless palm6_brain is enabled (Config.Enabled): a set convar with the
+# resource dark does nothing. Safe to set ahead of enabling the resource.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-custom-layer   # share the deploy lock so we never race a deploy
+  cancel-in-progress: false
+
+env:
+  PANEL_URL: ${{ vars.PANEL_URL || 'https://control.rocketnode.com' }}
+  SERVER_ID: ${{ vars.SERVER_ID || '9524616c' }}
+  GLM_URL: 'https://api.z.ai/api/paas/v4/chat/completions'
+  GLM_MODEL: 'glm-4.5-flash'
+
+jobs:
+  set-convars:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write GLM convars and restart
+        env:
+          PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
+          GLM_KEY: ${{ secrets.PALM6_GLM_KEY }}
+        run: |
+          set -euo pipefail
+
+          for v in PTERO_API_KEY GLM_KEY GLM_URL GLM_MODEL; do
+            if [ -z "${!v:-}" ]; then echo "::error::$v is not set"; exit 1; fi
+          done
+
+          API="$PANEL_URL/api/client/servers/$SERVER_ID"
+          AUTH=(-H "Authorization: Bearer $PTERO_API_KEY" -H "Accept: application/json")
+
+          fetch() {
+            curl -sS -o cur.cfg -w "%{http_code}" "${AUTH[@]}" \
+              "$API/files/contents?file=$1"
+          }
+
+          CFG_PATH=""
+          for cand in "%2Fserver.cfg" "%2FtxData%2Fserver.cfg"; do
+            code="$(fetch "$cand" || echo 000)"
+            if [ "$code" = "200" ] && grep -qE 'endpoint_add|sv_licenseKey|ensure |exec ' cur.cfg; then
+              CFG_PATH="$cand"; break
+            fi
+          done
+
+          if [ -z "$CFG_PATH" ]; then
+            echo "Root server.cfg not found; scanning /txData for a *.base profile..."
+            code="$(curl -sS -o list.json -w "%{http_code}" "${AUTH[@]}" "$API/files/list?directory=%2FtxData" || echo 000)"
+            if [ "$code" = "200" ]; then
+              base="$(jq -r '.data[].attributes | select(.is_file==false) | .name' list.json | grep -E '\.base$' | head -1 || true)"
+              if [ -n "$base" ]; then
+                enc="%2FtxData%2F${base}%2Fserver.cfg"
+                code="$(fetch "$enc" || echo 000)"
+                if [ "$code" = "200" ] && grep -qE 'endpoint_add|sv_licenseKey|ensure |exec ' cur.cfg; then
+                  CFG_PATH="$enc"
+                fi
+              fi
+            fi
+          fi
+
+          if [ -z "$CFG_PATH" ]; then
+            echo "::error::Could not locate a valid server.cfg to edit. Aborting (nothing written)."
+            exit 1
+          fi
+
+          BYTES="$(wc -c < cur.cfg)"
+          echo "Found server.cfg at '$CFG_PATH' ($BYTES bytes)."
+          if [ "$BYTES" -lt 200 ]; then
+            echo "::error::server.cfg suspiciously small ($BYTES bytes) — refusing to overwrite."
+            exit 1
+          fi
+
+          # Idempotent: strip any prior glm convars, then PREPEND fresh ones so
+          # they are set before 'exec custom.cfg' / 'ensure palm6_brain'.
+          grep -vE '^[[:space:]]*set[[:space:]]+palm6:glm_(key|url|model)[[:space:]]' cur.cfg > stripped.cfg || true
+          {
+            printf 'set palm6:glm_key "%s"\n' "$GLM_KEY"
+            printf 'set palm6:glm_url "%s"\n' "$GLM_URL"
+            printf 'set palm6:glm_model "%s"\n' "$GLM_MODEL"
+            cat stripped.cfg
+          } > new.cfg
+
+          NEWBYTES="$(wc -c < new.cfg)"
+          echo "New server.cfg is $NEWBYTES bytes; glm set-lines present: $(grep -cE '^set palm6:glm_' new.cfg)/3 (key value not printed)"
+
+          wcode="$(curl -sS -o write_resp.txt -w "%{http_code}" \
+            -H "Authorization: Bearer $PTERO_API_KEY" \
+            -H "Content-Type: text/plain" \
+            -X POST "$API/files/write?file=$CFG_PATH" \
+            --data-binary @new.cfg || echo 000)"
+          if [ "$wcode" -lt 200 ] || [ "$wcode" -ge 300 ]; then
+            echo "::error::file write failed (HTTP $wcode)"; cat write_resp.txt || true; exit 1
+          fi
+          echo "server.cfg written (HTTP $wcode)."
+
+          rcode="$(curl -sS -o restart_resp.txt -w "%{http_code}" \
+            -H "Authorization: Bearer $PTERO_API_KEY" \
+            -H "Content-Type: application/json" -H "Accept: application/json" \
+            -X POST "$API/power" -d '{"signal":"restart"}' || echo 000)"
+          if [ "$rcode" -lt 200 ] || [ "$rcode" -ge 300 ]; then
+            echo "::error::restart failed (HTTP $rcode)"; cat restart_resp.txt || true; exit 1
+          fi
+          echo "Restart signal accepted (HTTP $rcode). GLM convars set (values hidden)."

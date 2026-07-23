@@ -325,3 +325,61 @@ Config.NetPed = {
     Model   = 'a_m_y_business_01',   -- default test model
     WalkSpeed = 1.0,                 -- 1.0 walk, ~2.0 run (TaskFollowNavMeshToCoord)
 }
+
+-- ===========================================================================
+-- SOCIAL LAYER ("INTEL+") — talk to any ped, personas, reputation, witness,
+-- gossip, snitch, alibi — every mechanic the INTEL script has, but LLM-voiced
+-- (GLM, not canned pools) and fused with our autonomous AI Director. This is the
+-- shared FOUNDATION config the social modules read: server/social.lua exposes the
+-- `Social` global (personas + reputation + event seam + dialogue context) and the
+-- feature modules (witness/gossip/snitch/alibi/talk-to-any-ped/UI) hang off it.
+-- Dark by default (Config.Social.Enabled).
+-- ===========================================================================
+Config.Social = {
+    Enabled = true,    -- LIVE: talk-to-any-ped + personas + reputation ON; witness/gossip/snitch inert until crime events fire.
+
+    -- PERSONALITY ARCHETYPES — shape how a ped talks + reacts. `desc` is fed to the
+    -- LLM; the numeric traits (0..1) let scripted mechanics reason about a ped
+    -- (higher refusal = less likely to comply; higher provoke = angers faster;
+    -- higher bribe = more corruptible). Superset of INTEL's six.
+    Archetypes = {
+        coward     = { desc = 'timid and easily frightened; avoids confrontation and folds under pressure', refusal = 0.70, provoke = 0.20, bribe = 0.80 },
+        compliant  = { desc = 'cooperative and non-confrontational; tends to go along to get along',        refusal = 0.30, provoke = 0.50, bribe = 0.60 },
+        brave      = { desc = "stands their ground and won't be intimidated; calls your bluff",              refusal = 0.55, provoke = 0.70, bribe = 0.30 },
+        aggressive = { desc = 'hostile and quick to anger; escalates fast and takes offence easily',         refusal = 0.60, provoke = 0.90, bribe = 0.25 },
+        cunning    = { desc = 'sly and calculating; always angling for advantage and reading you',           refusal = 0.40, provoke = 0.40, bribe = 0.55 },
+        stoic      = { desc = 'calm, terse and unreadable; hard to move in any direction',                   refusal = 0.50, provoke = 0.30, bribe = 0.40 },
+    },
+    DefaultArchetype = 'compliant',
+
+    -- SESSION MOODS — a lighter, shorter-lived colour on top of the archetype.
+    Moods = { 'friendly', 'neutral', 'grumpy', 'distracted', 'curious' },
+
+    -- REPUTATION — per player, -10..+10, nine tiers. Actions (not chatter) move it;
+    -- tier gates dialogue tone + prices. Fed to the LLM so an NPC treats a trusted
+    -- regular differently from a known menace.
+    RepMin = -10, RepMax = 10,
+    RepTiers = {   -- upper bound (inclusive) -> tier label, ascending
+        { max = -7, label = 'hated' },   { max = -4, label = 'feared' },
+        { max = -1, label = 'distrusted' }, { max = 1, label = 'neutral' },
+        { max = 4,  label = 'liked' },    { max = 7, label = 'trusted' },
+        { max = 10, label = 'revered' },
+    },
+    -- Reputation deltas per action (INTEL: help +4, bribe +3, threat -1, rob -6).
+    RepDelta = { help = 4, bribe = 3, gift = 2, tip = 1, threat = -1, rob = -6, attack = -4, kill = -8 },
+
+    -- WITNESS — a ped within visual (or, for gunshots, audio) range remembers a
+    -- crime for this long. Consumed by server/witness.lua.
+    WitnessVisualRange = 50.0, WitnessAudioRange = 100.0, WitnessMemorySec = 86400,
+
+    -- GOSSIP — witnessed info spreads to nearby peds, losing fidelity each hop
+    -- (100% -> ... -> drops below MinFidelity and stops). server/gossip.lua.
+    GossipRange = 15.0, GossipDecayPerHop = 0.2, GossipMinFidelity = 0.2,
+
+    -- SNITCH — a witness with an informant streak reports to police dispatch; a
+    -- disguise (mask) reduces the odds. server/snitch.lua -> Bridge.AlertPolice.
+    SnitchBaseChance = 0.5, SnitchMaskReduction = 0.6,
+
+    -- TALK-TO-ANY-PED — interaction distance for the "talk" prompt on any ped.
+    TalkRange = 2.5,
+}

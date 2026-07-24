@@ -23,8 +23,13 @@ end
 -- Spawn a stationary scene ped running a scenario. Client-LOCAL (each client owns
 -- its own copy, non-networked) so the scene is free of server sync cost. The ped
 -- ignores the player and gunfire (SetBlockingOfNonTemporaryEvents) so it stays in
--- character, can't be killed/dragged, and (if freeze) is pinned in place.
-function Game.SpawnScenarioPed(model, x, y, z, heading, scenario, freeze)
+-- character and can't be killed/dragged.
+--
+-- `seated` matters: a seated scenario (PROP_HUMAN_SEAT_*) needs the sit-down
+-- animation to SETTLE the pelvis onto the chair. FreezeEntityPosition BEFORE that
+-- settles pins the ped mid-stand (the "standing not sitting" + twitch/CPU glitch),
+-- so seated peds are frozen only AFTER a short delay, once the sit has played.
+function Game.SpawnScenarioPed(model, x, y, z, heading, scenario, seated)
     local hash = loadModel(model)
     if not hash then return nil end
     -- Spawn at the exact given Z (per-zone flat-floor value). No ground-snap:
@@ -39,16 +44,27 @@ function Game.SpawnScenarioPed(model, x, y, z, heading, scenario, freeze)
     SetPedCanBeTargetted(ped, false)
     SetBlockingOfNonTemporaryEvents(ped, true)
     SetPedFleeAttributes(ped, 0, false)
+    SetPedKeepTask(ped, true)          -- hold the scenario instead of idling out
     SetPedConfigFlag(ped, 32, false)   -- CPED_CONFIG_FLAG_CanBeDraggedOut off
     SetPedConfigFlag(ped, 208, true)   -- disable writhe
     if scenario and scenario ~= '' then
-        if freeze then
-            TaskStartScenarioInPlace(ped, scenario, 0, true)
-        else
-            TaskStartScenarioAtPosition(ped, scenario, x + 0.0, y + 0.0, z + 0.0, heading + 0.0, 0, true, true)
-        end
+        -- In-place always: the ped plays the scenario where it stands, never
+        -- pathing off to hunt for a scenario prop (that hunt = the crowd churn).
+        TaskStartScenarioInPlace(ped, scenario, 0, true)
     end
-    if freeze then FreezeEntityPosition(ped, true) end
+    if seated then
+        -- Let the sit settle, then pin so it can't drift, re-heading in case the
+        -- sit rotated it.
+        CreateThread(function()
+            Wait(1600)
+            if DoesEntityExist(ped) then
+                SetEntityHeading(ped, heading + 0.0)
+                FreezeEntityPosition(ped, true)
+            end
+        end)
+    else
+        FreezeEntityPosition(ped, true)
+    end
     return ped
 end
 

@@ -32,7 +32,8 @@ end
 
 local function spawnPost(e)
     local models = Config.Peds[e.ped] or Config.Peds.civ
-    local ped = Game.SpawnScenarioPed(pick(models), e.coords.x, e.coords.y, e.coords.z, e.coords.w, e.scen, true)
+    local seated = e.kind == 'seat'
+    local ped = Game.SpawnScenarioPed(pick(models), e.coords.x, e.coords.y, e.coords.z, e.coords.w, e.scen, seated)
     if ped then
         spawned[#spawned + 1] = { ped = ped, post = e.post, room = e.room, kind = e.kind }
     end

@@ -25,17 +25,17 @@ from collections import defaultdict
 #   post:     if set, this is a takeable duty post (interactive phase)
 SELECT = [
     # ---- seated detectives / officers at their desks (exact office-chair coords)
-    ("prop_off_chair_05", "officeright",   "cop", "PROP_HUMAN_SEAT_COMPUTER", "seat", 4, None),
-    ("prop_off_chair_05", "officeleft",    "cop", "PROP_HUMAN_SEAT_COMPUTER", "seat", 4, None),
-    ("prop_off_chair_05", "captain",       "cop", "PROP_HUMAN_SEAT_COMPUTER", "seat", 2, "captain_desk"),
-    ("prop_off_chair_05", "2ndunitoffice", "cop", "PROP_HUMAN_SEAT_COMPUTER", "seat", 3, None),
+    ("prop_off_chair_05", "officeright",   "cop", "PROP_HUMAN_SEAT_CHAIR", "seat", 4, None),
+    ("prop_off_chair_05", "officeleft",    "cop", "PROP_HUMAN_SEAT_CHAIR", "seat", 4, None),
+    ("prop_off_chair_05", "captain",       "cop", "PROP_HUMAN_SEAT_CHAIR", "seat", 2, "captain_desk"),
+    ("prop_off_chair_05", "2ndunitoffice", "cop", "PROP_HUMAN_SEAT_CHAIR", "seat", 3, None),
     # ---- cops taking a breather / gearing up on armory benches (exact bench coords)
-    ("nteam_mrpd_bench",  "armory",        "cop", "PROP_HUMAN_SEAT_CHAIR_MP", "seat", 3, None),
+    ("nteam_mrpd_bench",  "armory",        "cop", "PROP_HUMAN_SEAT_CHAIR", "seat", 3, None),
     # ---- public waiting on lobby seating (exact seat coords)
-    ("nteammrpdlobbyseat","mainhall",      "civ", "PROP_HUMAN_SEAT_CHAIR_MP", "seat", 5, None),
-    ("nteammrpdlobbyseat","floor",         "civ", "PROP_HUMAN_SEAT_CHAIR_MP", "seat", 3, None),
-    ("nteammrpdlobbyseat","2ndunithall",   "civ", "PROP_HUMAN_SEAT_CHAIR_MP", "seat", 3, None),
-    ("nteammrpdlobbyseat","lefthall",      "civ", "PROP_HUMAN_SEAT_CHAIR_MP", "seat", 2, None),
+    ("nteammrpdlobbyseat","mainhall",      "civ", "PROP_HUMAN_SEAT_CHAIR", "seat", 5, None),
+    ("nteammrpdlobbyseat","floor",         "civ", "PROP_HUMAN_SEAT_CHAIR", "seat", 3, None),
+    ("nteammrpdlobbyseat","2ndunithall",   "civ", "PROP_HUMAN_SEAT_CHAIR", "seat", 3, None),
+    ("nteammrpdlobbyseat","lefthall",      "civ", "PROP_HUMAN_SEAT_CHAIR", "seat", 2, None),
     # ---- front-desk clerk: one cop at the reception desk. Its stand spot is the
     #      desk origin; gets /coords-nudged when it becomes the takeable front post.
     ("nteammainhalldesk", "mainhall",      "cop", "WORLD_HUMAN_CLIPBOARD",    "desk", 1, "front_desk"),

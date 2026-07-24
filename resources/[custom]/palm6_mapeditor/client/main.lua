@@ -27,6 +27,10 @@ local catNames, catIdx, propIdx = {}, 1, 0
 local undoStack = {}         -- { {type='spawn'|'delete', rec, index}, ... }
 local axis = 'z'             -- which rotation axis Q/E turns (z=yaw, x=pitch, y=roll)
 local gizmoActive = false    -- while object_gizmo has control, the loop stands down
+local allowed = false        -- server-confirmed ACE permission to drive the editor
+
+RegisterNetEvent('palm6_mapeditor:perm', function(ok) allowed = ok and true or false end)
+CreateThread(function() Wait(1500); TriggerServerEvent('palm6_mapeditor:checkPerm') end)
 
 for name in pairs(Config.QuickProps) do catNames[#catNames + 1] = name end
 table.sort(catNames)
@@ -40,15 +44,32 @@ local function highlight()
     for i, r in ipairs(placed) do Game.SetOutline(r.obj, i == sel) end
 end
 
-local function spawnProp(model, x, y, z, rx, ry, rz)
+local function spawnProp(model, x, y, z, rx, ry, rz, noUndo)
+    -- model names are strictly [A-Za-z0-9_]; reject anything else so it can never
+    -- break the generated Lua/XML export (or inject into a dofile'd export).
+    if type(model) ~= 'string' or not model:match('^[%w_]+$') then
+        Game.Notify('invalid model name: ' .. tostring(model), 'error'); return nil
+    end
     local obj = Game.SpawnObject(model, x, y, z)
-    if not obj then Game.Notify('bad model: ' .. tostring(model), 'error') return end
+    if not obj then Game.Notify('bad model: ' .. tostring(model), 'error') return nil end
     local rec = { obj = obj, model = model, x = x, y = y, z = z, rx = rx or 0.0, ry = ry or 0.0, rz = rz or 0.0 }
     placed[#placed + 1] = rec
     Game.SetObjectTransform(obj, rec.x, rec.y, rec.z, rec.rx, rec.ry, rec.rz)
     selectLast()
     highlight()
-    undoStack[#undoStack + 1] = { type = 'spawn', rec = rec }
+    if not noUndo then undoStack[#undoStack + 1] = { type = 'spawn', rec = rec } end
+    return rec
+end
+
+-- Run fn (which spawns props) as ONE undo group, so a grid/load is one /matundo.
+local function spawnBatch(fn)
+    local before = #placed
+    fn()
+    if #placed > before then
+        local recs = {}
+        for i = before + 1, #placed do recs[#recs + 1] = placed[i] end
+        undoStack[#undoStack + 1] = { type = 'batch', recs = recs }
+    end
 end
 
 local function spawnAtAim(model)
@@ -60,7 +81,8 @@ end
 -- Minimal API for client/tools.lua (world eraser / mass spawn / per-prop).
 MapEd = {}
 function MapEd.isEditing() return editing end
-function MapEd.spawnAt(model, x, y, z, rx, ry, rz) spawnProp(model, x, y, z, rx, ry, rz) end
+function MapEd.spawnAt(model, x, y, z, rx, ry, rz, noUndo) return spawnProp(model, x, y, z, rx, ry, rz, noUndo) end
+function MapEd.batch(fn) spawnBatch(fn) end
 function MapEd.selected() return selRec() end
 function MapEd.setGizmo(b) gizmoActive = b and true or false end
 function MapEd.deleteInRadius(x, y, z, rad)
@@ -98,16 +120,23 @@ local function duplicateSelected()
     spawnProp(r.model, r.x + 0.5, r.y + 0.5, r.z, r.rx, r.ry, r.rz)
 end
 
+local function removeRec(rec)
+    for i, rr in ipairs(placed) do if rr == rec then Game.DeleteObject(rr.obj); table.remove(placed, i); return end end
+end
+
 local function undo()
     local op = table.remove(undoStack)
     if not op then Game.Notify('nothing to undo') return end
     if op.type == 'spawn' then
-        for i, rr in ipairs(placed) do if rr == op.rec then sel = i; deleteSelected(true); break end end
+        removeRec(op.rec)
+    elseif op.type == 'batch' then
+        for _, rec in ipairs(op.recs) do removeRec(rec) end
+        Game.Notify('undid batch (' .. #op.recs .. ')')
     elseif op.type == 'delete' then
         local o = op.rec
-        spawnProp(o.model, o.x, o.y, o.z, o.rx, o.ry, o.rz)
-        table.remove(undoStack)   -- drop the spawn this just pushed
+        spawnProp(o.model, o.x, o.y, o.z, o.rx, o.ry, o.rz, true)   -- noUndo
     end
+    selectLast(); highlight()
 end
 
 local function clearAll()
@@ -200,8 +229,9 @@ RegisterCommand('mapexport', function(_, args)
     local lua, js, ymap = buildLua(), buildJson(), buildYmap(name)
     Game.SetClipboard(lua)
     TriggerServerEvent('palm6_mapeditor:save', name, lua, js, ymap)
-    Game.Notify(('exported %d objects (Lua+JSON+ymap saved; Lua on clipboard)'):format(#placed), 'success')
-    Game.Chat('[mapeditor]', ('exported %d objects as %s'):format(#placed, name))
+    -- Lua is on the clipboard now; the server sends the file-saved (or denied)
+    -- notify so we don't falsely claim success before it validates.
+    Game.Notify(('%d objects — Lua on clipboard, saving files...'):format(#placed), 'inform')
 end, false)
 
 RegisterCommand('mapload', function(_, args)
@@ -214,18 +244,20 @@ RegisterNetEvent('palm6_mapeditor:loaded', function(body)
     local ok, data = pcall(json.decode, body)
     if not ok or type(data) ~= 'table' then Game.Notify('bad save file', 'error') return end
     local n = 0
-    for _, o in ipairs(data.objects or {}) do
-        spawnProp(o.model, o.x, o.y, o.z, o.rx or 0.0, o.ry or 0.0, o.rz or 0.0)
-        n = n + 1
-    end
+    spawnBatch(function()
+        for _, o in ipairs(data.objects or {}) do
+            if spawnProp(o.model, o.x, o.y, o.z, o.rx or 0.0, o.ry or 0.0, o.rz or 0.0, true) then n = n + 1 end
+        end
+    end)
     if MapEd.addLight then for _, l in ipairs(data.lights or {}) do MapEd.addLight(l) end end
     Game.Notify(('loaded %d objects + %d lights'):format(n, #(data.lights or {})), 'success')
 end)
 
 -- ---- commands -------------------------------------------------------------
 RegisterCommand(Config.Command, function()
+    if not allowed then Game.Notify('not authorized — map editor is admin-only', 'error') return end
     editing = not editing
-    Game.Notify(editing and 'editor ON — /prop <model> or /matnext to spawn' or 'editor OFF', 'inform')
+    Game.Notify(editing and 'editor ON — /prop <model> or /matnext to spawn' or 'editor OFF (props kept)', 'inform')
 end, false)
 
 -- Prop browser (client/browser.lua) picks a model -> spawn it into the editor.
@@ -295,7 +327,7 @@ end
 -- ---- live edit loop -------------------------------------------------------
 CreateThread(function()
     while true do
-        if editing and not gizmoActive then   -- stand down while object_gizmo has control
+        if editing and not gizmoActive and not IsNuiFocused() then   -- stand down for gizmo / open menus
             drawHud()
             DisableControlAction(0, 21, true)  -- sprint (Shift modifier)
             DisableControlAction(0, 22, true)  -- jump (Space snap)

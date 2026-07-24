@@ -24,6 +24,14 @@ RegisterCommand('materaseundo', function()
     Game.Notify('restored world prop')
 end, false)
 
+-- Model-hides are raw client world-state that outlive the resource — restore
+-- them all on stop so a dev restart never leaves vanilla props permanently gone.
+AddEventHandler('onResourceStop', function(res)
+    if res ~= GetCurrentResourceName() then return end
+    for _, h in ipairs(hides) do Game.RestoreModelAt(h.x, h.y, h.z, h.r, h.model) end
+    hides = {}
+end)
+
 -- --- mass grid spawn -------------------------------------------------------
 -- /matgrid <rows> <cols> <spacing> — grid of the selected object's model,
 -- starting at the selection, using its rotation. One batch.
@@ -34,15 +42,17 @@ RegisterCommand('matgrid', function(_, args)
     local cols = math.max(1, math.min(20, tonumber(args[2]) or 3))
     local sp = tonumber(args[3]) or 2.0
     local n = 0
-    for i = 0, rows - 1 do
-        for j = 0, cols - 1 do
-            if not (i == 0 and j == 0) then   -- (0,0) is the existing selection
-                MapEd.spawnAt(r.model, r.x + i * sp, r.y + j * sp, r.z, r.rx, r.ry, r.rz)
-                n = n + 1
+    MapEd.batch(function()
+        for i = 0, rows - 1 do
+            for j = 0, cols - 1 do
+                if not (i == 0 and j == 0) then   -- (0,0) is the existing selection
+                    MapEd.spawnAt(r.model, r.x + i * sp, r.y + j * sp, r.z, r.rx, r.ry, r.rz, true)
+                    n = n + 1
+                end
             end
         end
-    end
-    Game.Notify(('grid spawned %d (%dx%d @ %.1f)'):format(n, rows, cols, sp), 'success')
+    end)
+    Game.Notify(('grid spawned %d (%dx%d @ %.1f) — one /matundo'):format(n, rows, cols, sp), 'success')
 end, false)
 
 -- --- visual gizmo (object_gizmo) -------------------------------------------
@@ -54,9 +64,9 @@ RegisterCommand('matgizmo', function()
     MapEd.setGizmo(true)
     Game.SetFreeze(r.obj, false)      -- the gizmo moves via SetEntityMatrix
     local ok = Game.UseGizmo(r.obj)   -- blocks until Enter; editor loop stands down
-    Game.SetFreeze(r.obj, true)
+    Game.SetFreeze(r.obj, r.frozen ~= false)   -- restore the prop's own freeze state
     MapEd.setGizmo(false)
-    if not ok then Game.Notify('object_gizmo not started', 'error') return end
+    if not ok then Game.Notify('gizmo unavailable / errored', 'error') return end
     local x, y, z, rx, ry, rz = Game.GetObjectTransform(r.obj)
     r.x, r.y, r.z, r.rx, r.ry, r.rz = x, y, z, rx, ry, rz
     Game.Notify('gizmo applied')

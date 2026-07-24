@@ -57,8 +57,9 @@ end
 function Game.UseGizmo(obj)
     if GetResourceState('object_gizmo') ~= 'started' then return false end
     if not (obj and DoesEntityExist(obj)) then return false end
-    pcall(function() exports.object_gizmo:useGizmo(obj) end)
-    return true
+    local ok, err = pcall(function() exports.object_gizmo:useGizmo(obj) end)
+    if not ok then print('[palm6_mapeditor] gizmo error: ' .. tostring(err)) end
+    return ok
 end
 
 function Game.SetObjectAlpha(obj, a)
@@ -121,11 +122,12 @@ end
 
 -- World eraser: hide all instances of a model in a tight sphere (vanilla map
 -- prop suppression). Excludes our own script objects; survives map reload.
+-- NOTE: this native family takes POSITION AS A SINGLE vector3, not 3 floats.
 function Game.HideModelAt(x, y, z, radius, modelHash)
-    CreateModelHideExcludingScriptObjects(x + 0.0, y + 0.0, z + 0.0, radius + 0.0, modelHash, true)
+    CreateModelHideExcludingScriptObjects(vector3(x + 0.0, y + 0.0, z + 0.0), radius + 0.0, modelHash, true)
 end
 function Game.RestoreModelAt(x, y, z, radius, modelHash)
-    RemoveModelHide(x + 0.0, y + 0.0, z + 0.0, radius + 0.0, modelHash, false)
+    RemoveModelHide(vector3(x + 0.0, y + 0.0, z + 0.0), radius + 0.0, modelHash, false)
 end
 
 function Game.SetOutline(obj, on)

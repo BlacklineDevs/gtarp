@@ -9,9 +9,18 @@ local function isAllowed(src)
     return IsPlayerAceAllowed(src, Config.Ace) or src == 0
 end
 
+local function deny(src)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Map Editor', description = 'not authorized (needs admin)', type = 'error' })
+end
+
+-- Client asks on load whether it may drive the editor (gates the commands).
+RegisterNetEvent('palm6_mapeditor:checkPerm', function()
+    TriggerClientEvent('palm6_mapeditor:perm', source, isAllowed(source))
+end)
+
 RegisterNetEvent('palm6_mapeditor:save', function(name, luaText, jsonText, ymapXml)
     local src = source
-    if not isAllowed(src) then return end
+    if not isAllowed(src) then deny(src) return end
     local safe = (tostring(name or 'map')):gsub('[^%w_%-]', '')
     if safe == '' then safe = 'map' end
     local stamp = os.date('%Y%m%d_%H%M%S')
@@ -26,7 +35,7 @@ end)
 -- Load a saved export back into the editor (save/load sessions).
 RegisterNetEvent('palm6_mapeditor:load', function(fileName)
     local src = source
-    if not isAllowed(src) then return end
+    if not isAllowed(src) then deny(src) return end
     local safe = (tostring(fileName or '')):gsub('[^%w_%-%.]', '')
     if safe == '' then return end
     if not safe:find('%.json$') then safe = safe .. '.json' end

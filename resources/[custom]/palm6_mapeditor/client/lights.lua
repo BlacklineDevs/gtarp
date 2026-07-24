@@ -48,7 +48,20 @@ RegisterCommand('matlightcolor', function(_, args)
 end, false)
 RegisterCommand('matlightrange', function(_, args) local l = lrec(); if l then l.range = math.max(0.5, tonumber(args[1]) or l.range) end end, false)
 RegisterCommand('matlightint', function(_, args) local l = lrec(); if l then l.intensity = math.max(0.1, tonumber(args[1]) or l.intensity) end end, false)
-RegisterCommand('matlightdel', function() local l = table.remove(lights); if l and lsel and lsel > #lights then lsel = #lights > 0 and #lights or nil end Game.Notify('light removed (' .. #lights .. ')') end, false)
+RegisterCommand('matlightpick', function()
+    if #lights == 0 then return end
+    local x, y, z = Game.CameraAimPoint(40.0)
+    if not x then return end
+    local best, bd
+    for i, l in ipairs(lights) do local d = (l.x - x) ^ 2 + (l.y - y) ^ 2 + (l.z - z) ^ 2; if not bd or d < bd then bd, best = d, i end end
+    lsel = best; Game.Notify('light ' .. best .. ' selected')
+end, false)
+RegisterCommand('matlightdel', function()
+    if not lsel or not lights[lsel] then return end
+    table.remove(lights, lsel)
+    lsel = #lights > 0 and math.min(lsel, #lights) or nil
+    Game.Notify('light removed (' .. #lights .. ')')
+end, false)
 
 -- --- hooks (main.lua's export folds these in; load re-adds them) -----------
 if MapEd then
